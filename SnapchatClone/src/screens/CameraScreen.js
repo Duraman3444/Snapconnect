@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { View, Text, TouchableOpacity, Alert, Image, StyleSheet, PanResponder, Dimensions } from 'react-native';
+import { View, Text, TouchableOpacity, Alert, Image, StyleSheet, PanResponder, Dimensions, Modal, ScrollView, SafeAreaView } from 'react-native';
 import { CameraView, CameraType, useCameraPermissions } from 'expo-camera';
 import * as MediaLibrary from 'expo-media-library';
 import { storage, db } from '../../firebaseConfig';
@@ -11,6 +11,9 @@ export default function CameraScreen({ navigation }) {
   const [facing, setFacing] = useState('back');
   const [photo, setPhoto] = useState(null);
   const [uploading, setUploading] = useState(false);
+  const [showFriendSelection, setShowFriendSelection] = useState(false);
+  const [selectedFriends, setSelectedFriends] = useState([]);
+  const [friends, setFriends] = useState([]);
   const cameraRef = useRef();
   const { currentUser, logout } = useAuth();
   const { currentTheme } = useTheme();
@@ -56,6 +59,29 @@ export default function CameraScreen({ navigation }) {
     })();
   }, [permission, requestPermission]);
 
+  // Load friends list
+  useEffect(() => {
+    const loadFriends = async () => {
+      try {
+        // Mock friends data - you can replace this with actual Firebase friends query
+        const mockFriends = [
+          { id: '1', username: 'alice_doe', displayName: 'Alice Doe', avatar: '👩' },
+          { id: '2', username: 'bob_smith', displayName: 'Bob Smith', avatar: '👨' },
+          { id: '3', username: 'charlie_brown', displayName: 'Charlie Brown', avatar: '🧑' },
+          { id: '4', username: 'diana_prince', displayName: 'Diana Prince', avatar: '👩‍🦳' },
+          { id: '5', username: 'eddie_murphy', displayName: 'Eddie Murphy', avatar: '👨‍🦱' },
+        ];
+        setFriends(mockFriends);
+      } catch (error) {
+        console.error('Error loading friends:', error);
+      }
+    };
+
+    if (currentUser) {
+      loadFriends();
+    }
+  }, [currentUser]);
+
   const takePicture = async () => {
     if (cameraRef.current) {
       try {
@@ -68,8 +94,26 @@ export default function CameraScreen({ navigation }) {
     }
   };
 
-  const uploadPhoto = async () => {
-    if (!photo) return;
+  const showFriendSelectionModal = () => {
+    setShowFriendSelection(true);
+    setSelectedFriends([]);
+  };
+
+  const toggleFriendSelection = (friendId) => {
+    setSelectedFriends(prev => {
+      if (prev.includes(friendId)) {
+        return prev.filter(id => id !== friendId);
+      } else {
+        return [...prev, friendId];
+      }
+    });
+  };
+
+  const sendSnapToSelectedFriends = async () => {
+    if (!photo || selectedFriends.length === 0) {
+      Alert.alert('Error', 'Please select at least one friend');
+      return;
+    }
 
     try {
       setUploading(true);
@@ -83,21 +127,71 @@ export default function CameraScreen({ navigation }) {
       await storageRef.put(blob);
       const downloadURL = await storageRef.getDownloadURL();
       
-      // Save snap data to Firestore using compat API
-      await db.collection('snaps').add({
+      // Create individual snaps for each selected friend
+      const snapPromises = selectedFriends.map(friendId => {
+        const selectedFriend = friends.find(f => f.id === friendId);
+        return db.collection('snaps').add({
+          senderId: currentUser.uid,
+          senderUsername: currentUser.username || 'Anonymous',
+          recipientId: friendId,
+          recipientUsername: selectedFriend?.username || 'Unknown',
+          imageUrl: downloadURL,
+          type: 'snap',
+          createdAt: new Date(),
+          expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 hours from now
+          viewed: false
+        });
+      });
+
+      await Promise.all(snapPromises);
+      
+      const selectedFriendNames = selectedFriends.map(id => 
+        friends.find(f => f.id === id)?.displayName || 'Unknown'
+      ).join(', ');
+      
+      Alert.alert('Success', `Snap sent to ${selectedFriendNames}!`);
+      setPhoto(null);
+      setShowFriendSelection(false);
+      setSelectedFriends([]);
+    } catch (error) {
+      Alert.alert('Error', 'Failed to send snap');
+      console.error('Upload error:', error);
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const uploadStory = async () => {
+    if (!photo) return;
+
+    try {
+      setUploading(true);
+      
+      // Convert photo to blob
+      const response = await fetch(photo.uri);
+      const blob = await response.blob();
+      
+      // Upload to Firebase Storage using compat API
+      const storageRef = storage.ref(`stories/${currentUser.uid}/${Date.now()}.jpg`);
+      await storageRef.put(blob);
+      const downloadURL = await storageRef.getDownloadURL();
+      
+      // Save story data to Firestore using compat API
+      await db.collection('stories').add({
         userId: currentUser.uid,
         username: currentUser.username || 'Anonymous',
         imageUrl: downloadURL,
+        type: 'story',
         createdAt: new Date(),
         expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 hours from now
         viewers: []
       });
       
-      Alert.alert('Success', 'Snap shared!');
+      Alert.alert('Success', 'Story shared with friends!');
       setPhoto(null);
     } catch (error) {
-      Alert.alert('Error', 'Failed to share snap');
-      console.error('Upload error:', error);
+      Alert.alert('Error', 'Failed to share story');
+      console.error('Upload story error:', error);
     } finally {
       setUploading(false);
     }
@@ -118,6 +212,8 @@ export default function CameraScreen({ navigation }) {
       Alert.alert('Error', 'Failed to logout');
     }
   };
+
+
 
   if (!permission) {
     return <View className="flex-1 justify-center items-center bg-black" />;
@@ -147,19 +243,29 @@ export default function CameraScreen({ navigation }) {
         {/* Photo preview overlay */}
         <View style={styles.photoOverlay}>
           <TouchableOpacity
-            style={[{ backgroundColor: 'white', borderRadius: 24, paddingHorizontal: 24, paddingVertical: 12 }]}
+            style={[{ backgroundColor: 'white', borderRadius: 20, paddingHorizontal: 16, paddingVertical: 10 }]}
             onPress={retakePhoto}
           >
-            <Text style={[{ color: 'black', fontWeight: '600' }]}>Retake</Text>
+            <Text style={[{ color: 'black', fontWeight: '600', fontSize: 14 }]}>Retake</Text>
           </TouchableOpacity>
           
           <TouchableOpacity
-            style={[{ backgroundColor: currentTheme.primary, borderRadius: 24, paddingHorizontal: 24, paddingVertical: 12 }]}
-            onPress={uploadPhoto}
+            style={[{ backgroundColor: currentTheme.primary, borderRadius: 20, paddingHorizontal: 16, paddingVertical: 10 }]}
+            onPress={showFriendSelectionModal}
             disabled={uploading}
           >
-            <Text style={[{ color: currentTheme.background, fontWeight: '600' }]}>
-              {uploading ? 'Sharing...' : 'Share'}
+            <Text style={[{ color: currentTheme.background, fontWeight: '600', fontSize: 14 }]}>
+              📤 Snap
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[{ backgroundColor: '#FF6B6B', borderRadius: 20, paddingHorizontal: 16, paddingVertical: 10 }]}
+            onPress={uploadStory}
+            disabled={uploading}
+          >
+            <Text style={[{ color: 'white', fontWeight: '600', fontSize: 14 }]}>
+              {uploading ? 'Sharing...' : '📖 Story'}
             </Text>
           </TouchableOpacity>
         </View>
@@ -233,6 +339,67 @@ export default function CameraScreen({ navigation }) {
           <Text style={{ fontSize: 20, fontWeight: 'bold' }}>📖</Text>
         </TouchableOpacity>
       </View>
+
+      {/* Friend Selection Modal */}
+      <Modal
+        visible={showFriendSelection}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowFriendSelection(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <SafeAreaView style={styles.modalContainer}>
+            <View style={styles.modalHeader}>
+              <TouchableOpacity 
+                onPress={() => setShowFriendSelection(false)}
+                style={styles.modalCloseButton}
+              >
+                <Text style={styles.modalCloseText}>✕</Text>
+              </TouchableOpacity>
+              <Text style={styles.modalTitle}>Send to Friends</Text>
+              <TouchableOpacity 
+                onPress={sendSnapToSelectedFriends}
+                style={[styles.modalSendButton, { opacity: selectedFriends.length > 0 ? 1 : 0.5 }]}
+                disabled={selectedFriends.length === 0 || uploading}
+              >
+                <Text style={styles.modalSendText}>
+                  {uploading ? 'Sending...' : `Send (${selectedFriends.length})`}
+                </Text>
+              </TouchableOpacity>
+            </View>
+            
+            <ScrollView style={styles.friendsList}>
+              {friends.map((friend) => (
+                <TouchableOpacity
+                  key={friend.id}
+                  style={[
+                    styles.friendItem,
+                    selectedFriends.includes(friend.id) && styles.friendItemSelected
+                  ]}
+                  onPress={() => toggleFriendSelection(friend.id)}
+                >
+                  <View style={styles.friendInfo}>
+                    <Text style={styles.friendAvatar}>{friend.avatar}</Text>
+                    <View style={styles.friendDetails}>
+                      <Text style={styles.friendName}>{friend.displayName}</Text>
+                      <Text style={styles.friendUsername}>@{friend.username}</Text>
+                    </View>
+                  </View>
+                  
+                  <View style={[
+                    styles.friendCheckbox,
+                    selectedFriends.includes(friend.id) && styles.friendCheckboxSelected
+                  ]}>
+                    {selectedFriends.includes(friend.id) && (
+                      <Text style={styles.friendCheckmark}>✓</Text>
+                    )}
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </SafeAreaView>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -276,7 +443,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-around',
     alignItems: 'center',
-    paddingHorizontal: 40,
+    paddingHorizontal: 20,
   },
   swipeIndicators: {
     position: 'absolute',
@@ -306,5 +473,104 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  
+  // Friend Selection Modal Styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContainer: {
+    backgroundColor: 'white',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: '80%',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+  },
+  modalCloseButton: {
+    padding: 5,
+  },
+  modalCloseText: {
+    fontSize: 20,
+    color: '#666',
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#333',
+  },
+  modalSendButton: {
+    backgroundColor: '#007AFF',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+  },
+  modalSendText: {
+    color: 'white',
+    fontWeight: '600',
+    fontSize: 14,
+  },
+  friendsList: {
+    flex: 1,
+  },
+  friendItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    backgroundColor: 'white',
+  },
+  friendItemSelected: {
+    backgroundColor: '#f0f8ff',
+  },
+  friendInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  friendAvatar: {
+    fontSize: 32,
+    marginRight: 12,
+  },
+  friendDetails: {
+    flex: 1,
+  },
+  friendName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
+  },
+  friendUsername: {
+    fontSize: 14,
+    color: '#666',
+    marginTop: 2,
+  },
+  friendCheckbox: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: '#ddd',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  friendCheckboxSelected: {
+    backgroundColor: '#007AFF',
+    borderColor: '#007AFF',
+  },
+  friendCheckmark: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: 'bold',
   },
 }); 
