@@ -183,19 +183,27 @@ export default function CameraScreen({ navigation }) {
 
       {/* Swipe Indicators */}
       <View style={styles.swipeIndicators}>
-        {/* Left swipe indicator */}
-        <View style={styles.leftSwipeIndicator}>
+        {/* Left swipe indicator - Friends */}
+        <TouchableOpacity 
+          style={styles.leftSwipeIndicator}
+          onPress={() => navigation.navigate('Friends')}
+          activeOpacity={0.7}
+        >
           <Text className="text-white text-opacity-60 text-sm">👥</Text>
-          <Text className="text-white text-opacity-60 text-xs">Swipe</Text>
-          <Text className="text-white text-opacity-60 text-xs">←</Text>
-        </View>
+          <Text className="text-white text-opacity-60 text-xs">Friends</Text>
+          <Text className="text-white text-opacity-60 text-xs">← Swipe</Text>
+        </TouchableOpacity>
         
-        {/* Right swipe indicator */}
-        <View style={styles.rightSwipeIndicator}>
+        {/* Right swipe indicator - Stories */}
+        <TouchableOpacity 
+          style={styles.rightSwipeIndicator}
+          onPress={() => navigation.navigate('Stories')}
+          activeOpacity={0.7}
+        >
           <Text className="text-white text-opacity-60 text-sm">📖</Text>
-          <Text className="text-white text-opacity-60 text-xs">Swipe</Text>
-          <Text className="text-white text-opacity-60 text-xs">→</Text>
-        </View>
+          <Text className="text-white text-opacity-60 text-xs">Stories</Text>
+          <Text className="text-white text-opacity-60 text-xs">Swipe →</Text>
+        </TouchableOpacity>
       </View>
 
       {/* Bottom Camera Controls */}
@@ -280,16 +288,20 @@ const styles = StyleSheet.create({
   },
   leftSwipeIndicator: {
     alignItems: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+    backgroundColor: 'rgba(0, 0, 0, 0.4)',
     borderRadius: 25,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
   },
   rightSwipeIndicator: {
     alignItems: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+    backgroundColor: 'rgba(0, 0, 0, 0.4)',
     borderRadius: 25,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
   },
 }); 
