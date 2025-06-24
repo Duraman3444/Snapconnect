@@ -181,23 +181,6 @@ export default function CameraScreen({ navigation }) {
         </TouchableOpacity>
       </View>
 
-      {/* Left Side Navigation */}
-      <View style={styles.leftNavigation}>
-        <TouchableOpacity
-          className="bg-black bg-opacity-60 rounded-full p-4 mb-6"
-          onPress={() => navigation.navigate('Friends')}
-        >
-          <Text className="text-white text-3xl">👥</Text>
-        </TouchableOpacity>
-        
-        <TouchableOpacity
-          className="bg-black bg-opacity-60 rounded-full p-4"
-          onPress={() => navigation.navigate('Home')}
-        >
-          <Text className="text-white text-3xl">💬</Text>
-        </TouchableOpacity>
-      </View>
-
       {/* Swipe Indicators */}
       <View style={styles.swipeIndicators}>
         {/* Left swipe indicator */}
@@ -254,12 +237,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     zIndex: 1,
   },
-  leftNavigation: {
-    position: 'absolute',
-    left: 20,
-    top: '35%',
-    zIndex: 1,
-  },
+
   bottomControls: {
     position: 'absolute',
     bottom: 60,
