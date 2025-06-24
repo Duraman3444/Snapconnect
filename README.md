@@ -1,33 +1,43 @@
 # SnapConnect 👻
 
-A modern, feature-rich social media application inspired by Snapchat, built with React Native, Expo, and Firebase. SnapConnect allows users to capture, share, and connect through ephemeral photo sharing and real-time social interactions.
+An AI-powered social platform specifically designed for college students to build meaningful academic and social connections. Using advanced RAG (Retrieval-Augmented Generation) technology, SnapConnect intelligently matches students with study partners, recommends relevant campus events, facilitates academic resource sharing, and helps students navigate campus social life more effectively.
 
-## ✨ Features
+## ✨ Core RAG-Powered Features
 
-### 🔐 Authentication System
-- **User Registration**: Create new accounts with email and password
-- **Secure Login**: Firebase Authentication integration
-- **User Profiles**: Personalized username and profile management
-- **Session Management**: Persistent login state with automatic token refresh
+### 🎓 Smart Study Group Formation
+- **AI Matching**: Automatically match with classmates based on course enrollment, study goals, and schedules
+- **Compatibility Scoring**: Intelligent algorithms analyze learning styles and academic performance patterns
+- **Success Metrics**: Track study group effectiveness and academic improvement
 
-### 📸 Camera & Media
-- **Real-time Camera**: Native camera integration with Expo Camera
-- **Photo Capture**: High-quality photo capture with front/back camera toggle
-- **Media Library**: Save and access captured content
-- **Photo Sharing**: Upload and share snaps with friends
-- **Ephemeral Content**: Auto-expiring photos (24-hour lifespan)
+### 🎉 Intelligent Campus Event Discovery
+- **Personalized Recommendations**: AI-powered event suggestions based on interests and social preferences
+- **Social Context**: See which friends are attending and get relevance scores
+- **Interest Analysis**: Machine learning algorithms predict event satisfaction
 
-### 👥 Social Features
-- **Friend Management**: Add, remove, and manage friend connections
-- **User Discovery**: Search users by username
-- **Friend Lists**: View and organize your social network
-- **Social Interactions**: Connect with friends through shared experiences
+### 📚 Academic Resource Sharing Network
+- **Course-Specific Resources**: Find and share notes, study guides, and project examples by course
+- **Quality Rating System**: Peer reviews and professor endorsements for shared content
+- **Performance Correlation**: Track academic success improvement through resource usage
 
-### 🏠 Content Feeds
-- **Stories Feed**: Browse friend stories and updates
-- **Home Feed**: Personalized content stream
-- **Real-time Updates**: Live content synchronization
-- **Interactive UI**: Intuitive swipe and tap navigation
+### 🗺️ Campus Social Navigation
+- **Contextual Recommendations**: Get personalized suggestions for campus spaces and activities based on mood and goals
+- **Real-time Intelligence**: Crowd level predictions, friend availability, and social situation assessment
+- **Mood-Based Matching**: AI analysis of current context and social needs
+
+### 📊 Course and Professor Insights
+- **Registration Support**: Intelligent course recommendations based on learning style and career goals
+- **Academic Analytics**: Aggregated student experiences and outcome predictions
+- **Difficulty Assessment**: Workload analysis and success probability scoring
+
+### 🤝 Social Interest Matching
+- **Friendship Recommendations**: Connect with students who share hobbies and interests
+- **Compatibility Analysis**: Social graph analysis and personality matching
+- **Conversation Starters**: AI-generated icebreakers and common interest identification
+
+### 🔐 Authentication & Profile System
+- **University Verification**: Student email authentication for campus-specific access
+- **Academic Integration**: Course enrollment and interest profiling
+- **Privacy Controls**: Granular settings for academic and social data sharing
 
 ### 🎨 User Experience
 - **Modern UI**: Clean, minimalist design with Snapchat-inspired aesthetics
@@ -43,6 +53,33 @@ A modern, feature-rich social media application inspired by Snapchat, built with
 - **Wallpaper Selection**: Choose from multiple color-themed wallpapers
 - **Privacy Controls**: Manage your account privacy settings
 - **Notification Settings**: Configure your notification preferences
+
+## 🎯 Target Demographic
+
+### Primary Users: Social Connectors (College Students)
+- **Age Range**: 18-24 years old
+- **Education Level**: Currently enrolled in colleges/universities (undergraduate and graduate)
+- **User Type**: Social Connectors who prioritize building and maintaining relationships
+- **Tech Comfort**: Tech-native generation comfortable with mobile-first applications
+
+### Key Characteristics:
+- **Academic Focus**: Actively seeking study partners and academic collaboration
+- **Social Goals**: Building new friendships and professional networks on campus
+- **Campus Engagement**: Interested in campus activities, events, and student organizations
+- **Work-Life Balance**: Need to balance academic responsibilities with social life
+- **Authentic Connections**: Value meaningful relationships over superficial interactions
+
+### User Personas:
+1. **The Campus Connector**: Outgoing students involved in multiple organizations, seeking to expand their network
+2. **The Academic Collaborator**: High-achieving students looking for serious study partners and academic support
+3. **The Social Explorer**: Transfer students or newcomers seeking to integrate into campus community
+
+### Pain Points We Address:
+- Difficulty finding compatible study partners across large campuses
+- Missing out on relevant campus events and activities
+- Challenges in building meaningful social connections
+- Academic stress and need for peer support
+- Social anxiety and integration challenges for new students
 
 ## 🚀 Getting Started
 
@@ -159,14 +196,29 @@ The app currently runs in mock mode for development purposes. All Firebase servi
 
 ## 🎯 Future Enhancements
 
-- **Video Support**: Record and share video snaps
-- **Filters & Effects**: AR filters and photo effects
-- **Chat System**: Direct messaging between friends
-- **Group Features**: Group chats and shared stories
-- **Push Notifications**: Real-time notifications
-- **Location Features**: Snap Map and location sharing
-- **Story Highlights**: Save favorite stories
-- **Advanced Privacy**: Enhanced privacy controls
+### Academic Features
+- **AI Study Scheduling**: Optimize study schedules using machine learning
+- **Academic Performance Prediction**: Early intervention for academic success
+- **LMS Integration**: Connect with university learning management systems
+- **Tutoring Connections**: AI-powered tutor and mentor matching
+
+### Social Intelligence
+- **Advanced Group Formation**: Multi-criteria group formation for projects and activities
+- **Social Skills Development**: Guided interactions for shy or introverted students
+- **Mental Health Support**: Connect students with wellness resources and peer support
+- **Campus Culture Integration**: Specialized onboarding for transfer and international students
+
+### Campus Integration
+- **Campus Services**: Integration with dining, transportation, and facility services
+- **Career Networking**: Professional networking and internship matching
+- **Alumni Connections**: Connect current students with alumni mentors
+- **Campus Safety**: Emergency notifications and safety check-ins
+
+### Technology Enhancements
+- **Advanced RAG**: More sophisticated retrieval and generation algorithms
+- **Voice Interaction**: Voice-powered queries and recommendations
+- **AR Campus Navigation**: Augmented reality for campus wayfinding
+- **Predictive Analytics**: Anticipate student needs and proactive recommendations
 
 ## 🤝 Contributing
 
