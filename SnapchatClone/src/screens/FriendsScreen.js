@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, TouchableOpacity, FlatList, Alert, StyleSheet } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, FlatList, Alert, StyleSheet, PanResponder } from 'react-native';
 import { db } from '../../firebaseConfig';
 import { useAuth } from '../context/AuthContext';
 
@@ -9,6 +9,20 @@ export default function FriendsScreen({ navigation }) {
   const [friends, setFriends] = useState([]);
   const [loading, setLoading] = useState(false);
   const { currentUser } = useAuth();
+
+  // Swipe gesture for navigation
+  const panResponder = PanResponder.create({
+    onStartShouldSetPanResponder: () => true,
+    onMoveShouldSetPanResponder: (_, gestureState) => {
+      return Math.abs(gestureState.dx) > Math.abs(gestureState.dy) && Math.abs(gestureState.dx) > 20;
+    },
+    onPanResponderRelease: (_, gestureState) => {
+      const { dx } = gestureState;
+      if (dx > 100) { // Swipe right to go back to camera
+        navigation.navigate('Camera');
+      }
+    },
+  });
 
   useEffect(() => {
     if (currentUser?.friends) {
@@ -176,7 +190,7 @@ export default function FriendsScreen({ navigation }) {
   );
 
   return (
-    <View className="flex-1 bg-snapBlack">
+    <View className="flex-1 bg-snapBlack" {...panResponder.panHandlers}>
       {/* Header */}
       <View className="bg-snapBlack pt-14 pb-6 px-6 border-b border-gray-700">
         <View className="flex-row items-center justify-between mb-4">

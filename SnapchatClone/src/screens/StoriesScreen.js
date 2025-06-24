@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, Image, TouchableOpacity, Alert, Dimensions, FlatList } from 'react-native';
+import { View, Text, Image, TouchableOpacity, Alert, Dimensions, FlatList, PanResponder } from 'react-native';
 import { db } from '../../firebaseConfig';
 import { useAuth } from '../context/AuthContext';
 
@@ -11,6 +11,20 @@ export default function StoriesScreen({ navigation, route }) {
   const [loading, setLoading] = useState(true);
   const { snap } = route?.params || {};
   const { currentUser } = useAuth();
+
+  // Swipe gesture for navigation
+  const panResponder = PanResponder.create({
+    onStartShouldSetPanResponder: () => true,
+    onMoveShouldSetPanResponder: (_, gestureState) => {
+      return Math.abs(gestureState.dx) > Math.abs(gestureState.dy) && Math.abs(gestureState.dx) > 20;
+    },
+    onPanResponderRelease: (_, gestureState) => {
+      const { dx } = gestureState;
+      if (dx < -100) { // Swipe left to go back to camera
+        navigation.navigate('Camera');
+      }
+    },
+  });
 
   useEffect(() => {
     if (snap) {
@@ -159,7 +173,7 @@ export default function StoriesScreen({ navigation, route }) {
   );
 
   return (
-    <View className="flex-1 bg-snapBlack">
+    <View className="flex-1 bg-snapBlack" {...panResponder.panHandlers}>
       {/* Header */}
       <View className="bg-snapBlack pt-14 pb-6 px-6 border-b border-gray-700">
         <View className="flex-row justify-between items-center mb-2">

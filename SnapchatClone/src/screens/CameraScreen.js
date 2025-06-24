@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { View, Text, TouchableOpacity, Alert, Image, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, Alert, Image, StyleSheet, PanResponder, Dimensions } from 'react-native';
 import { CameraView, CameraType, useCameraPermissions } from 'expo-camera';
 import * as MediaLibrary from 'expo-media-library';
 import { storage, db } from '../../firebaseConfig';
@@ -12,6 +12,38 @@ export default function CameraScreen({ navigation }) {
   const [uploading, setUploading] = useState(false);
   const cameraRef = useRef();
   const { currentUser, logout } = useAuth();
+
+  // Get screen dimensions for gesture detection
+  const screenWidth = Dimensions.get('window').width;
+  const swipeThreshold = screenWidth * 0.25; // 25% of screen width
+
+  // Gesture handling for swipe navigation
+  const panResponder = PanResponder.create({
+    onStartShouldSetPanResponder: () => true,
+    onMoveShouldSetPanResponder: (_, gestureState) => {
+      // Only handle horizontal swipes
+      return Math.abs(gestureState.dx) > Math.abs(gestureState.dy) && Math.abs(gestureState.dx) > 20;
+    },
+    onPanResponderRelease: (_, gestureState) => {
+      // Only handle swipes if no photo is being previewed
+      if (photo) return;
+
+      const { dx, dy } = gestureState;
+      
+      // Check if it's a horizontal swipe (more horizontal than vertical movement)
+      if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > swipeThreshold) {
+        if (dx > 0) {
+          // Swipe right -> Stories
+          console.log('Swiped right - navigating to Stories');
+          navigation.navigate('Stories');
+        } else {
+          // Swipe left -> Friends
+          console.log('Swiped left - navigating to Friends');
+          navigation.navigate('Friends');
+        }
+      }
+    },
+  });
 
   useEffect(() => {
     (async () => {
@@ -134,7 +166,7 @@ export default function CameraScreen({ navigation }) {
   }
 
   return (
-    <View className="flex-1 bg-black">
+    <View className="flex-1 bg-black" {...panResponder.panHandlers}>
       <CameraView 
         style={StyleSheet.absoluteFillObject} 
         facing={facing} 
@@ -164,6 +196,23 @@ export default function CameraScreen({ navigation }) {
         >
           <Text className="text-white text-3xl">💬</Text>
         </TouchableOpacity>
+      </View>
+
+      {/* Swipe Indicators */}
+      <View style={styles.swipeIndicators}>
+        {/* Left swipe indicator */}
+        <View style={styles.leftSwipeIndicator}>
+          <Text className="text-white text-opacity-60 text-sm">👥</Text>
+          <Text className="text-white text-opacity-60 text-xs">Swipe</Text>
+          <Text className="text-white text-opacity-60 text-xs">←</Text>
+        </View>
+        
+        {/* Right swipe indicator */}
+        <View style={styles.rightSwipeIndicator}>
+          <Text className="text-white text-opacity-60 text-sm">📖</Text>
+          <Text className="text-white text-opacity-60 text-xs">Swipe</Text>
+          <Text className="text-white text-opacity-60 text-xs">→</Text>
+        </View>
       </View>
 
       {/* Bottom Camera Controls */}
@@ -239,5 +288,30 @@ const styles = StyleSheet.create({
     justifyContent: 'space-around',
     alignItems: 'center',
     paddingHorizontal: 40,
+  },
+  swipeIndicators: {
+    position: 'absolute',
+    top: '50%',
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    zIndex: 1,
+  },
+  leftSwipeIndicator: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+    borderRadius: 25,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+  },
+  rightSwipeIndicator: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+    borderRadius: 25,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
   },
 }); 
