@@ -347,7 +347,9 @@ export default function FriendsScreen({ navigation }) {
         return;
       }
 
-      // Navigate to chat screen
+      console.log('Created/found conversation:', conversationId);
+
+      // Navigate to chat screen - conversationId is now a direct UUID
       navigation.navigate('Chat', {
         conversationId,
         otherUser: friend
@@ -405,10 +407,32 @@ export default function FriendsScreen({ navigation }) {
           <TouchableOpacity onPress={() => navigation.goBack()}>
             <Text style={[{ color: currentTheme.primary, fontSize: 18, fontWeight: '600' }]}>← Back</Text>
           </TouchableOpacity>
-          <TouchableOpacity onPress={onRefresh}>
-            <Text style={[{ color: currentTheme.primary, fontSize: 18, fontWeight: '600' }]}>🔄 Refresh</Text>
-          </TouchableOpacity>
+          
+          <View style={[{ flexDirection: 'row', alignItems: 'center', gap: 12 }]}>
+            <TouchableOpacity 
+              onPress={() => navigation.navigate('Camera')}
+              style={[{
+                backgroundColor: currentTheme.primary,
+                borderRadius: 20,
+                paddingHorizontal: 16,
+                paddingVertical: 8
+              }]}
+            >
+              <Text style={[{
+                color: currentTheme.background,
+                fontWeight: 'bold',
+                fontSize: 14
+              }]}>
+                📸 Camera
+              </Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity onPress={onRefresh}>
+              <Text style={[{ color: currentTheme.primary, fontSize: 18, fontWeight: '600' }]}>🔄</Text>
+            </TouchableOpacity>
+          </View>
         </View>
+        
         <View style={[{ alignItems: 'center' }]}>
           <Text style={[{ fontSize: 30, fontWeight: 'bold', color: currentTheme.primary, textAlign: 'center', marginBottom: 8 }]}>👥 Friends</Text>
           <Text style={[{ color: currentTheme.textSecondary, textAlign: 'center' }]}>

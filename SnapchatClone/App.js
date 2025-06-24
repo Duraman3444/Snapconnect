@@ -4,6 +4,7 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator, CardStyleInterpolators } from '@react-navigation/stack';
 import { AuthProvider, useAuth } from './src/context/SupabaseAuthContext';
 import { ThemeProvider } from './src/context/ThemeContext';
+import ErrorBoundary from './src/components/ErrorBoundary';
 
 // Import screens
 import LoginScreen from './src/screens/LoginScreen';
@@ -20,6 +21,19 @@ import ChatScreen from './src/screens/ChatScreen';
 import DebugAccountSwitcher from './src/components/DebugAccountSwitcher';
 
 const Stack = createStackNavigator();
+
+// Add this at the top after imports for debugging
+if (__DEV__) {
+  const originalXHR = global.XMLHttpRequest;
+  global.XMLHttpRequest = class extends originalXHR {
+    open(method, url, ...args) {
+      if (url.includes('supabase.co/storage')) {
+        console.log('🌐 Storage request:', method, url);
+      }
+      return super.open(method, url, ...args);
+    }
+  };
+}
 
 function LoadingScreen() {
   return (
@@ -118,10 +132,12 @@ function AppNavigator() {
 
 export default function App() {
   return (
-    <AuthProvider>
+    <ErrorBoundary>
       <ThemeProvider>
-        <AppNavigator />
+        <AuthProvider>
+          <AppNavigator />
+        </AuthProvider>
       </ThemeProvider>
-    </AuthProvider>
+    </ErrorBoundary>
   );
 }

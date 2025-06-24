@@ -197,6 +197,30 @@ export default function HomeScreen({ navigation }) {
         />
       )}
 
+      {/* Floating Camera Button */}
+      <TouchableOpacity
+        style={[{
+          position: 'absolute',
+          bottom: 100,
+          right: 20,
+          backgroundColor: currentTheme.primary,
+          borderRadius: 30,
+          width: 60,
+          height: 60,
+          justifyContent: 'center',
+          alignItems: 'center',
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 2 },
+          shadowOpacity: 0.25,
+          shadowRadius: 3.84,
+          elevation: 5,
+          zIndex: 1000
+        }]}
+        onPress={() => navigation.navigate('Camera')}
+      >
+        <Text style={[{ fontSize: 24, color: currentTheme.background }]}>📸</Text>
+      </TouchableOpacity>
+
       {/* Bottom Navigation */}
       <View style={[{ position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: currentTheme.surface, borderTopWidth: 1, borderTopColor: currentTheme.border, shadowColor: '#000', shadowOffset: { width: 0, height: -2 }, shadowOpacity: 0.1, shadowRadius: 8, elevation: 10 }]}>
         <View style={[{ flexDirection: 'row', justifyContent: 'around', paddingVertical: 16 }]}>

@@ -10,8 +10,7 @@ export default function CameraScreen({ navigation }) {
   const [facing, setFacing] = useState('back');
   const [photo, setPhoto] = useState(null);
   const [uploading, setUploading] = useState(false);
-  const [showFriendSelection, setShowFriendSelection] = useState(false);
-  const [selectedFriends, setSelectedFriends] = useState([]);
+  const [showActionModal, setShowActionModal] = useState(false);
   const [friends, setFriends] = useState([]);
   const cameraRef = useRef();
   const { currentUser, logout, supabase } = useAuth();
@@ -62,15 +61,34 @@ export default function CameraScreen({ navigation }) {
   useEffect(() => {
     const loadFriends = async () => {
       try {
-        // Mock friends data - you can replace this with actual Firebase friends query
-        const mockFriends = [
-          { id: '1', username: 'alice_doe', displayName: 'Alice Doe', avatar: '👩' },
-          { id: '2', username: 'bob_smith', displayName: 'Bob Smith', avatar: '👨' },
-          { id: '3', username: 'charlie_brown', displayName: 'Charlie Brown', avatar: '🧑' },
-          { id: '4', username: 'diana_prince', displayName: 'Diana Prince', avatar: '👩‍🦳' },
-          { id: '5', username: 'eddie_murphy', displayName: 'Eddie Murphy', avatar: '👨‍🦱' },
-        ];
-        setFriends(mockFriends);
+        if (!currentUser?.id) return;
+
+        // Get accepted friendships where current user is either user_id or friend_id
+        const { data: friendships, error } = await supabase
+          .from('friendships')
+          .select(`
+            *,
+            user_profile:profiles!friendships_user_id_fkey(*),
+            friend_profile:profiles!friendships_friend_id_fkey(*)
+          `)
+          .or(`user_id.eq.${currentUser.id},friend_id.eq.${currentUser.id}`)
+          .eq('status', 'accepted');
+
+        if (error) {
+          console.error('Error loading friends:', error);
+          return;
+        }
+
+        // Extract friend profiles (the other person in each friendship)
+        const friendProfiles = friendships.map(friendship => {
+          if (friendship.user_id === currentUser.id) {
+            return friendship.friend_profile;
+          } else {
+            return friendship.user_profile;
+          }
+        }).filter(profile => profile); // Remove any null profiles
+
+        setFriends(friendProfiles);
       } catch (error) {
         console.error('Error loading friends:', error);
       }
@@ -86,6 +104,7 @@ export default function CameraScreen({ navigation }) {
       try {
         const photo = await cameraRef.current.takePictureAsync();
         setPhoto(photo);
+        setShowActionModal(true);
       } catch (error) {
         Alert.alert('Error', 'Failed to take picture');
         console.error('Take picture error:', error);
@@ -93,36 +112,20 @@ export default function CameraScreen({ navigation }) {
     }
   };
 
-  const showFriendSelectionModal = () => {
-    setShowFriendSelection(true);
-    setSelectedFriends([]);
-  };
-
-  const toggleFriendSelection = (friendId) => {
-    setSelectedFriends(prev => {
-      if (prev.includes(friendId)) {
-        return prev.filter(id => id !== friendId);
-      } else {
-        return [...prev, friendId];
-      }
-    });
-  };
-
-  const sendSnapToSelectedFriends = async () => {
-    if (!photo || selectedFriends.length === 0) {
-      Alert.alert('Error', 'Please select at least one friend');
-      return;
-    }
+  // Send photo as ephemeral message to specific friend
+  const sendPhotoMessage = async (friend) => {
+    if (!photo || !friend) return;
 
     try {
       setUploading(true);
       
-      // Convert photo to blob
+      console.log('Original photo URI:', photo.uri);
+
+      // ✅ STEP 1: Upload photo to Supabase Storage (like stories do)
       const response = await fetch(photo.uri);
       const blob = await response.blob();
       
-      // Upload to Supabase Storage
-      const fileName = `snaps/${currentUser.id}/${Date.now()}.jpg`;
+      const fileName = `messages/${currentUser.id}/${Date.now()}.jpg`;
       const { data: uploadData, error: uploadError } = await supabase.storage
         .from('media')
         .upload(fileName, blob, {
@@ -131,51 +134,62 @@ export default function CameraScreen({ navigation }) {
 
       if (uploadError) throw uploadError;
 
-      // Get public URL
-      const { data: { publicUrl } } = supabase.storage
+      // ✅ STEP 2: Get public URL
+      const { data: urlData } = supabase.storage
         .from('media')
         .getPublicUrl(fileName);
-      
-      // Create individual snaps for each selected friend
-      const snapPromises = selectedFriends.map(friendId => {
-        const selectedFriend = friends.find(f => f.id === friendId);
-        return supabase.from('snaps').insert({
-          sender_id: currentUser.id,
-          sender_username: currentUser.username || 'Anonymous',
-          recipient_id: friendId,
-          recipient_username: selectedFriend?.username || 'Unknown',
-          image_url: publicUrl,
-          type: 'snap',
-          created_at: new Date().toISOString(),
-          expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(), // 24 hours from now
-          viewed: false
-        });
-      });
 
-      const results = await Promise.all(snapPromises);
-      
-      // Check if any inserts failed
-      const hasErrors = results.some(result => result.error);
-      if (hasErrors) {
-        console.error('Some snaps failed to send:', results.filter(r => r.error));
+      const publicUrl = urlData.publicUrl;
+      console.log('Generated photo message URL:', publicUrl);
+
+      // ✅ STEP 3: Get or create conversation
+      const { data: conversationId, error: convError } = await supabase
+        .rpc('get_or_create_conversation', {
+          user_one: currentUser.id,
+          user_two: friend.id
+        });
+
+      if (convError) {
+        console.error('Conversation error:', convError);
+        throw convError;
+      }
+
+      console.log('Conversation ID for photo:', conversationId);
+
+      if (!conversationId) {
+        throw new Error('Failed to create conversation');
+      }
+
+      // ✅ STEP 4: Send photo message with uploaded URL
+      const { error: messageError } = await supabase
+        .from('messages')
+        .insert({
+          conversation_id: conversationId, 
+          sender_id: currentUser.id,
+          receiver_id: friend.id,
+          content: '📸 Photo',
+          message_type: 'image',
+          image_url: publicUrl, // ← NOW USING UPLOADED URL!
+          is_ephemeral: true
+        });
+
+      if (messageError) {
+        console.error('Message insert error:', messageError);
+        throw messageError;
       }
       
-      const selectedFriendNames = selectedFriends.map(id => 
-        friends.find(f => f.id === id)?.displayName || 'Unknown'
-      ).join(', ');
-      
-      Alert.alert('Success', `Snap sent to ${selectedFriendNames}!`);
+      Alert.alert('Success', `Photo sent to ${friend.username}!`);
       setPhoto(null);
-      setShowFriendSelection(false);
-      setSelectedFriends([]);
+      setShowActionModal(false);
     } catch (error) {
-      Alert.alert('Error', 'Failed to send snap');
-      console.error('Upload error:', error);
+      Alert.alert('Error', 'Failed to send photo: ' + error.message);
+      console.error('Send photo error:', error);
     } finally {
       setUploading(false);
     }
   };
 
+  // Post photo as story
   const uploadStory = async () => {
     if (!photo) return;
 
@@ -196,10 +210,13 @@ export default function CameraScreen({ navigation }) {
 
       if (uploadError) throw uploadError;
 
-      // Get public URL
-      const { data: { publicUrl } } = supabase.storage
+      // Get public URL - UPDATED METHOD
+      const { data: urlData } = supabase.storage
         .from('media')
         .getPublicUrl(fileName);
+
+      const publicUrl = urlData.publicUrl;
+      console.log('Generated story URL:', publicUrl);
       
       // Save story data to Supabase
       const { error: insertError } = await supabase.from('stories').insert({
@@ -214,10 +231,11 @@ export default function CameraScreen({ navigation }) {
 
       if (insertError) throw insertError;
       
-      Alert.alert('Success', 'Story shared with friends!');
+      Alert.alert('Success', 'Story posted!');
       setPhoto(null);
+      setShowActionModal(false);
     } catch (error) {
-      Alert.alert('Error', 'Failed to share story');
+      Alert.alert('Error', 'Failed to post story');
       console.error('Upload story error:', error);
     } finally {
       setUploading(false);
@@ -226,6 +244,7 @@ export default function CameraScreen({ navigation }) {
 
   const retakePhoto = () => {
     setPhoto(null);
+    setShowActionModal(false);
   };
 
   const toggleCameraFacing = () => {
@@ -260,39 +279,142 @@ export default function CameraScreen({ navigation }) {
     );
   }
 
-  if (photo) {
+  // Photo preview and action modal
+  if (photo && showActionModal) {
     return (
       <View className="flex-1 bg-black">
         <Image source={{ uri: photo.uri }} className="flex-1" />
         
-        {/* Photo preview overlay */}
-        <View style={styles.photoOverlay}>
-          <TouchableOpacity
-            style={[{ backgroundColor: 'white', borderRadius: 20, paddingHorizontal: 16, paddingVertical: 10 }]}
-            onPress={retakePhoto}
-          >
-            <Text style={[{ color: 'black', fontWeight: '600', fontSize: 14 }]}>Retake</Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity
-            style={[{ backgroundColor: currentTheme.primary, borderRadius: 20, paddingHorizontal: 16, paddingVertical: 10 }]}
-            onPress={showFriendSelectionModal}
-            disabled={uploading}
-          >
-            <Text style={[{ color: currentTheme.background, fontWeight: '600', fontSize: 14 }]}>
-              📤 Snap
+        {/* Action Modal */}
+        <View style={styles.photoActionModal}>
+          <View style={[{ 
+            backgroundColor: currentTheme.surface, 
+            borderRadius: 20, 
+            padding: 20,
+            margin: 20,
+            maxHeight: '70%'
+          }]}>
+            <Text style={[{ 
+              fontSize: 20, 
+              fontWeight: 'bold', 
+              marginBottom: 20, 
+              textAlign: 'center',
+              color: currentTheme.text
+            }]}>
+              Share Photo
             </Text>
-          </TouchableOpacity>
+            
+            {/* Action Buttons */}
+            <View style={[{ flexDirection: 'row', marginBottom: 20 }]}>
+              <TouchableOpacity
+                style={[{ 
+                  flex: 1, 
+                  backgroundColor: currentTheme.primary, 
+                  borderRadius: 15, 
+                  paddingVertical: 12,
+                  marginRight: 8
+                }]}
+                onPress={uploadStory}
+                disabled={uploading}
+              >
+                <Text style={[{ 
+                  color: currentTheme.background, 
+                  fontWeight: '600', 
+                  textAlign: 'center',
+                  fontSize: 16
+                }]}>
+                  📖 Post Story
+                </Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity
+                style={[{ 
+                  flex: 1, 
+                  backgroundColor: currentTheme.background, 
+                  borderRadius: 15, 
+                  paddingVertical: 12,
+                  borderWidth: 2,
+                  borderColor: currentTheme.primary,
+                  marginLeft: 8
+                }]}
+                onPress={retakePhoto}
+              >
+                <Text style={[{ 
+                  color: currentTheme.primary, 
+                  fontWeight: '600', 
+                  textAlign: 'center',
+                  fontSize: 16
+                }]}>
+                  🔄 Retake
+                </Text>
+              </TouchableOpacity>
+            </View>
 
-          <TouchableOpacity
-            style={[{ backgroundColor: '#FF6B6B', borderRadius: 20, paddingHorizontal: 16, paddingVertical: 10 }]}
-            onPress={uploadStory}
-            disabled={uploading}
-          >
-            <Text style={[{ color: 'white', fontWeight: '600', fontSize: 14 }]}>
-              {uploading ? 'Sharing...' : '📖 Story'}
+            {/* Friends List for Sending */}
+            <Text style={[{ 
+              fontSize: 16, 
+              fontWeight: 'bold', 
+              marginBottom: 12,
+              color: currentTheme.text
+            }]}>
+              Send to Friends:
             </Text>
-          </TouchableOpacity>
+            
+            <ScrollView style={[{ maxHeight: 200 }]}>
+              {friends.map((friend) => (
+                <TouchableOpacity
+                  key={friend.id}
+                  style={[{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    paddingVertical: 12,
+                    paddingHorizontal: 16,
+                    marginVertical: 2,
+                    borderRadius: 12,
+                    backgroundColor: currentTheme.background
+                  }]}
+                  onPress={() => sendPhotoMessage(friend)}
+                  disabled={uploading}
+                >
+                  <View style={[{
+                    backgroundColor: currentTheme.primary,
+                    borderRadius: 25,
+                    width: 50,
+                    height: 50,
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                    marginRight: 12
+                  }]}>
+                    <Text style={[{
+                      color: currentTheme.background,
+                      fontWeight: 'bold',
+                      fontSize: 18
+                    }]}>
+                      {friend.username?.charAt(0).toUpperCase()}
+                    </Text>
+                  </View>
+                  <Text style={[{
+                    fontSize: 16,
+                    fontWeight: '500',
+                    color: currentTheme.text
+                  }]}>
+                    {friend.username}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+
+            {friends.length === 0 && (
+              <Text style={[{
+                textAlign: 'center',
+                color: currentTheme.textSecondary,
+                fontStyle: 'italic',
+                marginVertical: 20
+              }]}>
+                Add friends to send photos to them!
+              </Text>
+            )}
+          </View>
         </View>
       </View>
     );
@@ -369,67 +491,6 @@ export default function CameraScreen({ navigation }) {
           <Text style={{ fontSize: 20, fontWeight: 'bold' }}>📖</Text>
         </TouchableOpacity>
       </View>
-
-      {/* Friend Selection Modal */}
-      <Modal
-        visible={showFriendSelection}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => setShowFriendSelection(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <SafeAreaView style={styles.modalContainer}>
-            <View style={styles.modalHeader}>
-              <TouchableOpacity 
-                onPress={() => setShowFriendSelection(false)}
-                style={styles.modalCloseButton}
-              >
-                <Text style={styles.modalCloseText}>✕</Text>
-              </TouchableOpacity>
-              <Text style={styles.modalTitle}>Send to Friends</Text>
-              <TouchableOpacity 
-                onPress={sendSnapToSelectedFriends}
-                style={[styles.modalSendButton, { opacity: selectedFriends.length > 0 ? 1 : 0.5 }]}
-                disabled={selectedFriends.length === 0 || uploading}
-              >
-                <Text style={styles.modalSendText}>
-                  {uploading ? 'Sending...' : `Send (${selectedFriends.length})`}
-                </Text>
-              </TouchableOpacity>
-            </View>
-            
-            <ScrollView style={styles.friendsList}>
-              {friends.map((friend) => (
-                <TouchableOpacity
-                  key={friend.id}
-                  style={[
-                    styles.friendItem,
-                    selectedFriends.includes(friend.id) && styles.friendItemSelected
-                  ]}
-                  onPress={() => toggleFriendSelection(friend.id)}
-                >
-                  <View style={styles.friendInfo}>
-                    <Text style={styles.friendAvatar}>{friend.avatar}</Text>
-                    <View style={styles.friendDetails}>
-                      <Text style={styles.friendName}>{friend.displayName}</Text>
-                      <Text style={styles.friendUsername}>@{friend.username}</Text>
-                    </View>
-                  </View>
-                  
-                  <View style={[
-                    styles.friendCheckbox,
-                    selectedFriends.includes(friend.id) && styles.friendCheckboxSelected
-                  ]}>
-                    {selectedFriends.includes(friend.id) && (
-                      <Text style={styles.friendCheckmark}>✓</Text>
-                    )}
-                  </View>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-          </SafeAreaView>
-        </View>
-      </Modal>
     </View>
   );
 }
@@ -602,5 +663,15 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 14,
     fontWeight: 'bold',
+  },
+  photoActionModal: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 }); 
