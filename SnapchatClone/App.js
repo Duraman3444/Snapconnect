@@ -1,8 +1,9 @@
 import React from 'react';
 import { View, Text } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
-import { createStackNavigator } from '@react-navigation/stack';
+import { createStackNavigator, CardStyleInterpolators } from '@react-navigation/stack';
 import { AuthProvider, useAuth } from './src/context/AuthContext';
+import { ThemeProvider } from './src/context/ThemeContext';
 
 // Import screens
 import LoginScreen from './src/screens/LoginScreen';
@@ -11,6 +12,7 @@ import HomeScreen from './src/screens/HomeScreen';
 import CameraScreen from './src/screens/CameraScreen';
 import StoriesScreen from './src/screens/StoriesScreen';
 import FriendsScreen from './src/screens/FriendsScreen';
+import ProfileScreen from './src/screens/ProfileScreen';
 
 const Stack = createStackNavigator();
 
@@ -38,8 +40,22 @@ function AppNavigator() {
           <>
             <Stack.Screen name="Camera" component={CameraScreen} />
             <Stack.Screen name="Home" component={HomeScreen} />
-            <Stack.Screen name="Stories" component={StoriesScreen} />
-            <Stack.Screen name="Friends" component={FriendsScreen} />
+            <Stack.Screen 
+              name="Stories" 
+              component={StoriesScreen}
+              options={{
+                cardStyleInterpolator: CardStyleInterpolators.forHorizontalIOS,
+              }}
+            />
+            <Stack.Screen 
+              name="Friends" 
+              component={FriendsScreen}
+              options={{
+                cardStyleInterpolator: CardStyleInterpolators.forHorizontalIOS,
+                gestureDirection: 'horizontal-inverted',
+              }}
+            />
+            <Stack.Screen name="Profile" component={ProfileScreen} />
           </>
         ) : (
           // Authentication screens
@@ -56,7 +72,9 @@ function AppNavigator() {
 export default function App() {
   return (
     <AuthProvider>
-      <AppNavigator />
+      <ThemeProvider>
+        <AppNavigator />
+      </ThemeProvider>
     </AuthProvider>
   );
 }

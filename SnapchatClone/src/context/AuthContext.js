@@ -131,6 +131,33 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  // Update user profile function
+  const updateUserProfile = async (updates) => {
+    try {
+      if (!currentUser) throw new Error('No user logged in');
+      
+      // Update user document in Firestore
+      await db.collection('users').doc(currentUser.uid).update(updates);
+      
+      // Update email in Firebase Auth if changed
+      if (updates.email && updates.email !== currentUser.email) {
+        await currentUser.updateEmail(updates.email);
+      }
+      
+      // Refresh current user data
+      const userDoc = await db.collection('users').doc(currentUser.uid).get();
+      if (userDoc.exists) {
+        const userData = { ...currentUser, ...userDoc.data() };
+        setCurrentUser(userData);
+      }
+      
+      return true;
+    } catch (error) {
+      console.error('Error updating user profile:', error);
+      throw error;
+    }
+  };
+
   const value = {
     currentUser,
     signup,
@@ -138,7 +165,8 @@ export const AuthProvider = ({ children }) => {
     logout,
     loading,
     staySignedIn,
-    getStoredEmail
+    getStoredEmail,
+    updateUserProfile
   };
 
   return (

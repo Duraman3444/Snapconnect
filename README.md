@@ -31,10 +31,18 @@ A modern, feature-rich social media application inspired by Snapchat, built with
 
 ### 🎨 User Experience
 - **Modern UI**: Clean, minimalist design with Snapchat-inspired aesthetics
-- **Dark Theme**: Eye-friendly dark mode interface
+- **Customizable Themes**: Dark/Light mode toggle with multiple wallpaper options
+- **Profile Management**: Comprehensive settings for account customization
 - **Responsive Design**: Optimized for various screen sizes
 - **Smooth Animations**: Fluid transitions and interactions
 - **Accessibility**: User-friendly navigation and controls
+
+### ⚙️ Profile & Settings
+- **Account Management**: Change username, email, and password
+- **Theme Customization**: Toggle between dark and light modes
+- **Wallpaper Selection**: Choose from multiple color-themed wallpapers
+- **Privacy Controls**: Manage your account privacy settings
+- **Notification Settings**: Configure your notification preferences
 
 ## 🚀 Getting Started
 
@@ -107,12 +115,15 @@ SnapchatClone/
 ├── firebaseConfig.js      # Firebase configuration
 ├── src/
 │   ├── components/        # Reusable UI components
-│   │   └── AuthContext.js # Authentication context
+│   ├── context/          # React contexts
+│   │   ├── AuthContext.js     # Authentication context
+│   │   └── ThemeContext.js    # Theme and appearance context
 │   ├── screens/          # Application screens
 │   │   ├── CameraScreen.js    # Main camera interface
 │   │   ├── HomeScreen.js      # Home/chat feed
 │   │   ├── FriendsScreen.js   # Friend management
 │   │   ├── StoriesScreen.js   # Stories feed
+│   │   ├── ProfileScreen.js   # User profile and settings
 │   │   ├── LoginScreen.js     # User login
 │   │   └── SignupScreen.js    # User registration
 │   ├── hooks/            # Custom React hooks
@@ -141,8 +152,10 @@ The app currently runs in mock mode for development purposes. All Firebase servi
 4. **Navigation**: 
    - Left swipe: Friends screen
    - Right swipe: Stories feed
-   - Bottom navigation: Home feed
-5. **Social**: Add friends, view stories, share content
+   - Top-right profile button: User profile and settings
+   - Bottom navigation: Home feed with profile access
+5. **Profile**: Customize themes, manage account, change settings
+6. **Social**: Add friends, view stories, share content
 
 ## 🎯 Future Enhancements
 

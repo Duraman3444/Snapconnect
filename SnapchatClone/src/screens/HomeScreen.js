@@ -91,8 +91,10 @@ export default function HomeScreen({ navigation }) {
           <TouchableOpacity onPress={() => navigation.navigate('Camera')}>
             <Text className="text-snapYellow text-lg font-semibold">← Camera</Text>
           </TouchableOpacity>
-          <TouchableOpacity onPress={handleLogout}>
-            <Text className="text-snapYellow text-lg font-semibold">Logout</Text>
+          <TouchableOpacity onPress={() => navigation.navigate('Profile')}>
+            <View className="bg-snapYellow rounded-full p-2">
+              <Text className="text-black font-bold text-lg">👤</Text>
+            </View>
           </TouchableOpacity>
         </View>
         <View className="items-center">
@@ -167,6 +169,14 @@ export default function HomeScreen({ navigation }) {
           >
             <Text className="text-3xl mb-1">📖</Text>
             <Text className="text-xs text-snapYellow font-semibold">Stories</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={() => navigation.navigate('Profile')}
+            className="items-center flex-1"
+          >
+            <Text className="text-3xl mb-1">👤</Text>
+            <Text className="text-xs text-snapYellow font-semibold">Profile</Text>
           </TouchableOpacity>
         </View>
       </View>

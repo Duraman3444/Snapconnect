@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, TextInput, TouchableOpacity, FlatList, Alert, StyleSheet, PanResponder } from 'react-native';
 import { db } from '../../firebaseConfig';
 import { useAuth } from '../context/AuthContext';
+import { useTheme } from '../context/ThemeContext';
 
 export default function FriendsScreen({ navigation }) {
   const [searchText, setSearchText] = useState('');
@@ -9,6 +10,7 @@ export default function FriendsScreen({ navigation }) {
   const [friends, setFriends] = useState([]);
   const [loading, setLoading] = useState(false);
   const { currentUser } = useAuth();
+  const { currentTheme } = useTheme();
 
   // Swipe gesture for navigation
   const panResponder = PanResponder.create({
@@ -138,28 +140,24 @@ export default function FriendsScreen({ navigation }) {
   };
 
   const renderSearchResult = ({ item }) => (
-    <View className="bg-snapGray rounded-xl mx-4 mb-3 p-4 flex-row items-center justify-between border border-gray-600 shadow-lg">
-      <View className="flex-row items-center flex-1">
-        <View className="bg-snapYellow rounded-full w-14 h-14 justify-center items-center mr-4">
-          <Text className="text-black font-bold text-xl">
+    <View style={[{ backgroundColor: currentTheme.surface, borderRadius: 12, marginHorizontal: 16, marginBottom: 12, padding: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderWidth: 1, borderColor: currentTheme.border }]}>
+      <View style={[{ flexDirection: 'row', alignItems: 'center', flex: 1 }]}>
+        <View style={[{ backgroundColor: currentTheme.primary, borderRadius: 28, width: 56, height: 56, justifyContent: 'center', alignItems: 'center', marginRight: 16 }]}>
+          <Text style={[{ color: currentTheme.background, fontWeight: 'bold', fontSize: 20 }]}>
             {item.username?.charAt(0).toUpperCase()}
           </Text>
         </View>
-        <View className="flex-1">
-          <Text className="font-bold text-xl text-snapYellow">{item.username}</Text>
-          <Text className="text-gray-300">{item.email}</Text>
+        <View style={[{ flex: 1 }]}>
+          <Text style={[{ fontWeight: 'bold', fontSize: 20, color: currentTheme.primary }]}>{item.username}</Text>
+          <Text style={[{ color: currentTheme.textSecondary }]}>{item.email}</Text>
         </View>
       </View>
       
       <TouchableOpacity
-        className={`px-6 py-3 rounded-full shadow-md ${
-          isFriend(item.id) ? 'bg-red-500' : 'bg-snapYellow'
-        }`}
+        style={[{ paddingHorizontal: 24, paddingVertical: 12, borderRadius: 24, backgroundColor: isFriend(item.id) ? '#ef4444' : currentTheme.primary }]}
         onPress={() => isFriend(item.id) ? removeFriend(item.id) : addFriend(item.id)}
       >
-        <Text className={`font-bold ${
-          isFriend(item.id) ? 'text-white' : 'text-black'
-        }`}>
+        <Text style={[{ fontWeight: 'bold', color: isFriend(item.id) ? 'white' : currentTheme.background }]}>
           {isFriend(item.id) ? '❌ Remove' : '➕ Add'}
         </Text>
       </TouchableOpacity>
@@ -167,62 +165,63 @@ export default function FriendsScreen({ navigation }) {
   );
 
   const renderFriend = ({ item }) => (
-    <View className="bg-snapGray rounded-xl mx-4 mb-3 p-4 flex-row items-center justify-between border border-gray-600 shadow-lg">
-      <View className="flex-row items-center flex-1">
-        <View className="bg-snapYellow rounded-full w-14 h-14 justify-center items-center mr-4">
-          <Text className="text-black font-bold text-xl">
+    <View style={[{ backgroundColor: currentTheme.surface, borderRadius: 12, marginHorizontal: 16, marginBottom: 12, padding: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderWidth: 1, borderColor: currentTheme.border }]}>
+      <View style={[{ flexDirection: 'row', alignItems: 'center', flex: 1 }]}>
+        <View style={[{ backgroundColor: currentTheme.primary, borderRadius: 28, width: 56, height: 56, justifyContent: 'center', alignItems: 'center', marginRight: 16 }]}>
+          <Text style={[{ color: currentTheme.background, fontWeight: 'bold', fontSize: 20 }]}>
             {item.username?.charAt(0).toUpperCase()}
           </Text>
         </View>
-        <View className="flex-1">
-          <Text className="font-bold text-xl text-snapYellow">{item.username}</Text>
-          <Text className="text-gray-300">{item.email}</Text>
+        <View style={[{ flex: 1 }]}>
+          <Text style={[{ fontWeight: 'bold', fontSize: 20, color: currentTheme.primary }]}>{item.username}</Text>
+          <Text style={[{ color: currentTheme.textSecondary }]}>{item.email}</Text>
         </View>
       </View>
       
       <TouchableOpacity
-        className="bg-red-500 px-6 py-3 rounded-full shadow-md"
+        style={[{ backgroundColor: '#ef4444', paddingHorizontal: 24, paddingVertical: 12, borderRadius: 24 }]}
         onPress={() => removeFriend(item.id)}
       >
-        <Text className="text-white font-bold">❌ Remove</Text>
+        <Text style={[{ color: 'white', fontWeight: 'bold' }]}>❌ Remove</Text>
       </TouchableOpacity>
     </View>
   );
 
   return (
-    <View className="flex-1 bg-snapBlack" {...panResponder.panHandlers}>
+    <View style={[{ flex: 1, backgroundColor: currentTheme.background }]} {...panResponder.panHandlers}>
       {/* Header */}
-      <View className="bg-snapBlack pt-14 pb-6 px-6 border-b border-gray-700">
-        <View className="flex-row items-center justify-between mb-4">
+      <View style={[{ backgroundColor: currentTheme.background, paddingTop: 56, paddingBottom: 24, paddingHorizontal: 24, borderBottomWidth: 1, borderBottomColor: currentTheme.border }]}>
+        <View style={[{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }]}>
+          <View style={[{ width: 70 }]} />
           <TouchableOpacity onPress={() => navigation.goBack()}>
-            <Text className="text-snapYellow text-lg font-semibold">← Back</Text>
+            <Text style={[{ color: currentTheme.primary, fontSize: 18, fontWeight: '600' }]}>Back →</Text>
           </TouchableOpacity>
         </View>
-        <View className="items-center">
-          <Text className="text-3xl font-bold text-snapYellow text-center mb-2">👥 Friends</Text>
-          <Text className="text-gray-400 text-center">
+        <View style={[{ alignItems: 'center' }]}>
+          <Text style={[{ fontSize: 30, fontWeight: 'bold', color: currentTheme.primary, textAlign: 'center', marginBottom: 8 }]}>👥 Friends</Text>
+          <Text style={[{ color: currentTheme.textSecondary, textAlign: 'center' }]}>
             Connect with friends and share moments! ✨
           </Text>
         </View>
       </View>
 
       {/* Search Bar */}
-      <View className="px-4 pt-6">
-        <View className="bg-snapGray rounded-full flex-row items-center px-6 py-4 border border-gray-600 shadow-lg">
+      <View style={[{ paddingHorizontal: 16, paddingTop: 24 }]}>
+        <View style={[{ backgroundColor: currentTheme.surface, borderRadius: 24, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 24, paddingVertical: 16, borderWidth: 1, borderColor: currentTheme.border }]}>
           <TextInput
-            style={styles.searchInput}
+            style={[styles.searchInput, { color: currentTheme.text }]}
             placeholder="Search by username..."
-            placeholderTextColor="#888"
+            placeholderTextColor={currentTheme.textSecondary}
             value={searchText}
             onChangeText={setSearchText}
             onSubmitEditing={searchUsers}
           />
           <TouchableOpacity
             onPress={searchUsers}
-            className="bg-snapYellow rounded-full px-4 py-2 ml-2"
+            style={[{ backgroundColor: currentTheme.primary, borderRadius: 20, paddingHorizontal: 16, paddingVertical: 8, marginLeft: 8 }]}
             disabled={loading}
           >
-            <Text className="text-black font-bold">
+            <Text style={[{ color: currentTheme.background, fontWeight: 'bold' }]}>
               {loading ? '⏳' : '🔍'}
             </Text>
           </TouchableOpacity>
@@ -230,15 +229,15 @@ export default function FriendsScreen({ navigation }) {
       </View>
 
       {/* My Friends Section */}
-      <View className="px-4 pt-6">
-        <Text className="text-xl font-bold text-snapYellow mb-4 text-center">
+      <View style={[{ paddingHorizontal: 16, paddingTop: 24 }]}>
+        <Text style={[{ fontSize: 20, fontWeight: 'bold', color: currentTheme.primary, marginBottom: 16, textAlign: 'center' }]}>
           My Friends ({friends.length})
         </Text>
         
         {friends.length === 0 ? (
-          <View className="items-center py-8">
-            <Text className="text-4xl mb-4">👤</Text>
-            <Text className="text-lg text-gray-400 text-center">
+          <View style={[{ alignItems: 'center', paddingVertical: 32 }]}>
+            <Text style={[{ fontSize: 32, marginBottom: 16 }]}>👤</Text>
+            <Text style={[{ fontSize: 18, color: currentTheme.textSecondary, textAlign: 'center' }]}>
               No friends yet! Start by searching above. 🔍
             </Text>
           </View>
@@ -255,8 +254,8 @@ export default function FriendsScreen({ navigation }) {
 
       {/* Search Results */}
       {searchResults.length > 0 && (
-        <View className="flex-1 px-4 pt-4">
-          <Text className="text-xl font-bold text-snapYellow mb-4 text-center">
+        <View style={[{ flex: 1, paddingHorizontal: 16, paddingTop: 16 }]}>
+          <Text style={[{ fontSize: 20, fontWeight: 'bold', color: currentTheme.primary, marginBottom: 16, textAlign: 'center' }]}>
             Search Results
           </Text>
           <FlatList
@@ -269,9 +268,9 @@ export default function FriendsScreen({ navigation }) {
       )}
 
       {searchText.length > 0 && searchResults.length === 0 && !loading && (
-        <View className="flex-1 justify-center items-center px-8">
-          <Text className="text-4xl mb-4">🔍</Text>
-          <Text className="text-lg text-gray-400 text-center">
+        <View style={[{ flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 32 }]}>
+          <Text style={[{ fontSize: 32, marginBottom: 16 }]}>🔍</Text>
+          <Text style={[{ fontSize: 18, color: currentTheme.textSecondary, textAlign: 'center' }]}>
             No users found with that username. Try a different search! 
           </Text>
         </View>
@@ -284,7 +283,6 @@ const styles = StyleSheet.create({
   searchInput: {
     flex: 1,
     fontSize: 18,
-    color: 'white',
     textAlign: 'left',
   }
 }); 

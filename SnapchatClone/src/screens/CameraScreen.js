@@ -4,6 +4,7 @@ import { CameraView, CameraType, useCameraPermissions } from 'expo-camera';
 import * as MediaLibrary from 'expo-media-library';
 import { storage, db } from '../../firebaseConfig';
 import { useAuth } from '../context/AuthContext';
+import { useTheme } from '../context/ThemeContext';
 
 export default function CameraScreen({ navigation }) {
   const [permission, requestPermission] = useCameraPermissions();
@@ -12,6 +13,7 @@ export default function CameraScreen({ navigation }) {
   const [uploading, setUploading] = useState(false);
   const cameraRef = useRef();
   const { currentUser, logout } = useAuth();
+  const { currentTheme } = useTheme();
 
   // Get screen dimensions for gesture detection
   const screenWidth = Dimensions.get('window').width;
@@ -123,15 +125,15 @@ export default function CameraScreen({ navigation }) {
 
   if (!permission.granted) {
     return (
-      <View className="flex-1 justify-center items-center bg-black px-8">
-        <Text className="text-white text-lg text-center mb-4">
+      <View style={[{ flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 32 }, { backgroundColor: currentTheme.background }]}>
+        <Text style={[{ fontSize: 18, textAlign: 'center', marginBottom: 16 }, { color: currentTheme.text }]}>
           We need your permission to show the camera
         </Text>
         <TouchableOpacity
-          className="bg-snapYellow rounded-full px-6 py-3"
+          style={[{ borderRadius: 24, paddingHorizontal: 24, paddingVertical: 12 }, { backgroundColor: currentTheme.primary }]}
           onPress={requestPermission}
         >
-          <Text className="text-black font-semibold">Grant Permission</Text>
+          <Text style={[{ fontWeight: '600' }, { color: currentTheme.background }]}>Grant Permission</Text>
         </TouchableOpacity>
       </View>
     );
@@ -145,18 +147,18 @@ export default function CameraScreen({ navigation }) {
         {/* Photo preview overlay */}
         <View style={styles.photoOverlay}>
           <TouchableOpacity
-            className="bg-white rounded-full px-6 py-3"
+            style={[{ backgroundColor: 'white', borderRadius: 24, paddingHorizontal: 24, paddingVertical: 12 }]}
             onPress={retakePhoto}
           >
-            <Text className="text-black font-semibold">Retake</Text>
+            <Text style={[{ color: 'black', fontWeight: '600' }]}>Retake</Text>
           </TouchableOpacity>
           
           <TouchableOpacity
-            className="bg-snapYellow rounded-full px-6 py-3"
+            style={[{ backgroundColor: currentTheme.primary, borderRadius: 24, paddingHorizontal: 24, paddingVertical: 12 }]}
             onPress={uploadPhoto}
             disabled={uploading}
           >
-            <Text className="text-black font-semibold">
+            <Text style={[{ color: currentTheme.background, fontWeight: '600' }]}>
               {uploading ? 'Sharing...' : 'Share'}
             </Text>
           </TouchableOpacity>
@@ -175,9 +177,11 @@ export default function CameraScreen({ navigation }) {
       
       {/* Top Header */}
       <View style={styles.topHeader}>
-        <Text className="text-2xl font-bold text-snapYellow">👻 SnapConnect</Text>
-        <TouchableOpacity onPress={handleLogout}>
-          <Text className="text-snapYellow text-lg font-semibold">Logout</Text>
+        <Text style={[{ fontSize: 24, fontWeight: 'bold' }, { color: currentTheme.primary }]}>👻 SnapConnect</Text>
+        <TouchableOpacity onPress={() => navigation.navigate('Profile')}>
+          <View style={[{ borderRadius: 20, padding: 8 }, { backgroundColor: currentTheme.primary }]}>
+            <Text style={[{ fontWeight: 'bold', fontSize: 18 }, { color: currentTheme.background }]}>👤</Text>
+          </View>
         </TouchableOpacity>
       </View>
 
@@ -209,25 +213,24 @@ export default function CameraScreen({ navigation }) {
       {/* Bottom Camera Controls */}
       <View style={styles.bottomControls}>
         <TouchableOpacity
-          className="bg-white bg-opacity-90 rounded-full p-4"
+          style={[{ borderRadius: 25, padding: 16 }, { backgroundColor: 'rgba(255, 255, 255, 0.9)' }]}
           onPress={toggleCameraFacing}
         >
-          <Text className="text-black font-bold text-xl">🔄</Text>
+          <Text style={{ fontSize: 20, fontWeight: 'bold' }}>🔄</Text>
         </TouchableOpacity>
         
         <TouchableOpacity
-          className="bg-white rounded-full justify-center items-center"
-          style={styles.captureButton}
+          style={[styles.captureButton, { backgroundColor: 'white', justifyContent: 'center', alignItems: 'center', borderRadius: 42.5 }]}
           onPress={takePicture}
         >
-          <View className="bg-black rounded-full" style={styles.captureButtonInner} />
+          <View style={[styles.captureButtonInner, { backgroundColor: 'black', borderRadius: 37.5 }]} />
         </TouchableOpacity>
         
         <TouchableOpacity
-          className="bg-white bg-opacity-90 rounded-full p-4"
+          style={[{ borderRadius: 25, padding: 16 }, { backgroundColor: 'rgba(255, 255, 255, 0.9)' }]}
           onPress={() => navigation.navigate('Stories')}
         >
-          <Text className="text-black font-bold text-xl">📖</Text>
+          <Text style={{ fontSize: 20, fontWeight: 'bold' }}>📖</Text>
         </TouchableOpacity>
       </View>
     </View>
