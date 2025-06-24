@@ -19,12 +19,13 @@ import ImageWithFallback from '../components/ImageWithFallback';
 const { width: screenWidth } = Dimensions.get('window');
 
 export default function ChatScreen({ navigation, route }) {
-  const { conversationId, otherUser } = route.params || {};
+  const { conversationId, otherUser, isGroup, groupName, groupDescription } = route.params || {};
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState('');
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [ephemeralMode, setEphemeralMode] = useState(true); // Default to ephemeral like Snapchat
+  const [groupParticipants, setGroupParticipants] = useState([]);
   const { currentUser, supabase } = useAuth();
   const { currentTheme } = useTheme();
   const flatListRef = useRef();
@@ -32,18 +33,29 @@ export default function ChatScreen({ navigation, route }) {
 
   // Safety check - if we don't have required data, go back
   React.useEffect(() => {
-    if (!conversationId || !otherUser || !currentUser) {
+    if (!conversationId || !currentUser) {
       console.log('ChatScreen: Missing required data, navigating back');
       navigation.goBack();
       return;
     }
-  }, [conversationId, otherUser, currentUser, navigation]);
+    // For 1-on-1 chats, we need otherUser. For groups, we don't.
+    if (!isGroup && !otherUser) {
+      console.log('ChatScreen: Missing otherUser for 1-on-1 chat, navigating back');
+      navigation.goBack();
+      return;
+    }
+  }, [conversationId, otherUser, isGroup, currentUser, navigation]);
 
   useEffect(() => {
-    if (!currentUser?.id || !conversationId || !otherUser?.id) return;
+    if (!currentUser?.id || !conversationId) return;
 
     loadMessages();
     markMessagesAsRead();
+    
+    // Load group participants if this is a group chat
+    if (isGroup) {
+      loadGroupParticipants();
+    }
     
     // Set up real-time subscription for new messages
     const messagesChannel = supabase
@@ -111,13 +123,33 @@ export default function ChatScreen({ navigation, route }) {
       })
       .subscribe();
 
+    // Set up real-time subscription for group participants changes
+    let groupChannel = null;
+    if (isGroup) {
+      groupChannel = supabase
+        .channel(`group_${conversationId}`)
+        .on('postgres_changes', {
+          event: '*',
+          schema: 'public',
+          table: 'group_participants',
+          filter: `conversation_id=eq.${conversationId}`
+        }, (payload) => {
+          console.log('Group participants updated:', payload);
+          loadGroupParticipants();
+        })
+        .subscribe();
+    }
+
     return () => {
       messagesChannel.unsubscribe();
+      if (groupChannel) {
+        groupChannel.unsubscribe();
+      }
       // Clear all timers
       messageTimers.current.forEach(timer => clearInterval(timer));
       messageTimers.current.clear();
     };
-  }, [currentUser, conversationId]);
+  }, [currentUser, conversationId, isGroup]);
 
   // Calculate time remaining for ephemeral messages
   const calculateTimeRemaining = (message) => {
@@ -192,13 +224,36 @@ export default function ChatScreen({ navigation, route }) {
     }
   };
 
+  const loadGroupParticipants = async () => {
+    if (!isGroup || !conversationId) return;
+    
+    try {
+      const { data: participants, error } = await supabase
+        .rpc('get_group_participants', { conversation_id: conversationId });
+      
+      if (error) {
+        console.error('Error loading group participants:', error);
+        return;
+      }
+      
+      setGroupParticipants(participants || []);
+    } catch (error) {
+      console.error('Error loading group participants:', error);
+    }
+  };
+
   const markMessagesAsRead = async () => {
     if (!currentUser?.id || !conversationId) return;
     
     try {
       // For ephemeral messages, we handle viewing instead of just marking as read
       const unreadMessages = messages.filter(msg => 
-        !msg.is_read && msg.receiver_id === currentUser?.id
+        !msg.is_read && (
+          // For 1-on-1: receiver is current user
+          (!isGroup && msg.receiver_id === currentUser?.id) ||
+          // For groups: receiver is null and sender is not current user
+          (isGroup && msg.receiver_id === null && msg.sender_id !== currentUser?.id)
+        )
       );
       
       for (const message of unreadMessages) {
@@ -257,7 +312,9 @@ export default function ChatScreen({ navigation, route }) {
   };
 
   const sendMessage = async () => {
-    if (!newMessage.trim() || sending || !currentUser?.id || !otherUser?.id) return;
+    if (!newMessage.trim() || sending || !currentUser?.id) return;
+    // For groups, we don't need otherUser. For 1-on-1, we do.
+    if (!isGroup && !otherUser?.id) return;
 
     const messageContent = newMessage.trim();
     setNewMessage('');
@@ -269,7 +326,7 @@ export default function ChatScreen({ navigation, route }) {
       id: `temp-${Date.now()}`, // Temporary ID
       conversation_id: conversationId,
       sender_id: currentUser.id,
-      receiver_id: otherUser.id,
+      receiver_id: isGroup ? null : otherUser.id, // null for group messages
       content: messageContent,
       message_type: 'text',
       created_at: new Date().toISOString(),
@@ -289,18 +346,44 @@ export default function ChatScreen({ navigation, route }) {
     }, 100);
 
     try {
-      const { data, error } = await supabase
-        .from('messages')
-        .insert({
+      let data, error;
+      
+      if (isGroup) {
+        // Use the group messaging function
+        ({ data, error } = await supabase.rpc('send_group_message', {
           conversation_id: conversationId,
           sender_id: currentUser.id,
-          receiver_id: otherUser.id,
           content: messageContent,
-          message_type: 'text',
-          is_ephemeral: ephemeralMode
-        })
-        .select()
-        .single();
+          message_type: 'text'
+        }));
+        
+        // If successful, get the full message data
+        if (!error && data) {
+          const { data: messageData, error: fetchError } = await supabase
+            .from('messages')
+            .select('*')
+            .eq('id', data)
+            .single();
+          
+          if (!fetchError) {
+            data = messageData;
+          }
+        }
+      } else {
+        // Regular 1-on-1 message
+        ({ data, error } = await supabase
+          .from('messages')
+          .insert({
+            conversation_id: conversationId,
+            sender_id: currentUser.id,
+            receiver_id: otherUser.id,
+            content: messageContent,
+            message_type: 'text',
+            is_ephemeral: ephemeralMode
+          })
+          .select()
+          .single());
+      }
 
       if (error) {
         console.error('Error sending message:', error);
@@ -369,6 +452,17 @@ export default function ChatScreen({ navigation, route }) {
     }
   };
 
+  const getSenderDisplayName = (senderId) => {
+    if (senderId === currentUser?.id) return 'You';
+    
+    if (isGroup) {
+      const participant = groupParticipants.find(p => p.user_id === senderId);
+      return participant?.username || 'Unknown';
+    }
+    
+    return otherUser?.username || 'Unknown';
+  };
+
   const renderMessage = ({ item, index }) => {
     const isMyMessage = item.sender_id === currentUser?.id;
     const previousMessage = index > 0 ? messages[index - 1] : null;
@@ -376,6 +470,13 @@ export default function ChatScreen({ navigation, route }) {
       new Date(item.created_at) - new Date(previousMessage.created_at) > 5 * 60 * 1000; // 5 minutes
 
     const isImageMessage = item.message_type === 'image';
+    
+    // Show sender name for group messages when sender changes or after timestamp
+    const showSenderName = isGroup && !isMyMessage && (
+      !previousMessage || 
+      previousMessage.sender_id !== item.sender_id ||
+      showTimestamp
+    );
 
     return (
       <View style={[{ 
@@ -395,6 +496,18 @@ export default function ChatScreen({ navigation, route }) {
               {formatMessageTime(item.created_at)}
             </Text>
           </View>
+        )}
+        
+        {showSenderName && (
+          <Text style={[{
+            fontSize: 12,
+            color: '#10b981',
+            fontWeight: 'bold',
+            marginBottom: 4,
+            marginLeft: 8
+          }]}>
+            {getSenderDisplayName(item.sender_id)}
+          </Text>
         )}
         
         <TouchableOpacity 
@@ -583,25 +696,31 @@ export default function ChatScreen({ navigation, route }) {
       paddingHorizontal: 32
     }]}>
       <Text style={[{ fontSize: 48, marginBottom: 16 }]}>
-        {ephemeralMode ? '👻' : '👋'}
+        {isGroup ? '👥' : (ephemeralMode ? '👻' : '👋')}
       </Text>
       <Text style={[{
         fontSize: 20,
         fontWeight: 'bold',
-        color: currentTheme.primary,
+        color: isGroup ? '#10b981' : currentTheme.primary,
         marginBottom: 8,
         textAlign: 'center'
       }]}>
-        {ephemeralMode ? 'Send a disappearing message!' : 'Start the conversation!'}
+        {isGroup 
+          ? 'Welcome to the group!'
+          : (ephemeralMode ? 'Send a disappearing message!' : 'Start the conversation!')
+        }
       </Text>
       <Text style={[{
         fontSize: 16,
         color: currentTheme.textSecondary,
         textAlign: 'center'
       }]}>
-        {ephemeralMode 
-          ? `Photos and messages will disappear after 24 hours or when viewed by ${otherUser?.username}`
-          : `Send a message to ${otherUser?.username}`
+        {isGroup
+          ? `Send a message to start chatting with ${groupParticipants.filter(p => p.is_active && p.user_id !== currentUser?.id).length} members`
+          : (ephemeralMode 
+            ? `Photos and messages will disappear after 24 hours or when viewed by ${otherUser?.username}`
+            : `Send a message to ${otherUser?.username}`
+          )
         }
       </Text>
     </View>
@@ -634,57 +753,110 @@ export default function ChatScreen({ navigation, route }) {
         </TouchableOpacity>
         
         <View style={[{
-          backgroundColor: currentTheme.primary,
+          backgroundColor: isGroup ? '#10b981' : currentTheme.primary,
           borderRadius: 22,
           width: 44,
           height: 44,
           justifyContent: 'center',
           alignItems: 'center',
-          marginRight: 12
+          marginRight: 12,
+          position: 'relative'
         }]}>
           <Text style={[{
             color: currentTheme.background,
             fontWeight: 'bold',
             fontSize: 18
           }]}>
-            {otherUser?.username?.charAt(0).toUpperCase() || '?'}
+            {isGroup 
+              ? (groupName?.charAt(0).toUpperCase() || 'G')
+              : (otherUser?.username?.charAt(0).toUpperCase() || '?')
+            }
           </Text>
+          {isGroup && (
+            <View style={[{
+              position: 'absolute',
+              bottom: -2,
+              right: -2,
+              backgroundColor: '#10b981',
+              borderRadius: 6,
+              width: 12,
+              height: 12,
+              justifyContent: 'center',
+              alignItems: 'center',
+              borderWidth: 1,
+              borderColor: currentTheme.surface
+            }]}>
+              <Text style={[{
+                color: 'white',
+                fontSize: 8,
+                fontWeight: 'bold'
+              }]}>
+                👥
+              </Text>
+            </View>
+          )}
         </View>
         
         <View style={[{ flex: 1 }]}>
           <Text style={[{
             fontSize: 20,
             fontWeight: 'bold',
-            color: currentTheme.primary
+            color: isGroup ? '#10b981' : currentTheme.primary
           }]}>
-            {otherUser?.username || 'Unknown User'}
+            {isGroup ? (groupName || 'Group Chat') : (otherUser?.username || 'Unknown User')}
           </Text>
           <Text style={[{
             fontSize: 14,
             color: currentTheme.textSecondary
           }]}>
-            {ephemeralMode ? '👻 Disappearing messages' : 'Online'}
+            {isGroup 
+              ? `${groupParticipants.filter(p => p.is_active).length} members`
+              : (ephemeralMode ? '👻 Disappearing messages' : 'Online')
+            }
           </Text>
         </View>
 
-        {/* Ephemeral mode toggle */}
-        <TouchableOpacity
-          onPress={() => setEphemeralMode(!ephemeralMode)}
-          style={[{
-            padding: 8,
-            borderRadius: 20,
-            backgroundColor: ephemeralMode ? currentTheme.primary : currentTheme.background,
-            borderWidth: 1,
-            borderColor: currentTheme.primary
-          }]}
-        >
-          <Text style={[{
-            color: ephemeralMode ? currentTheme.background : currentTheme.primary,
-            fontSize: 16
-          }]}>
-            {ephemeralMode ? '👻' : '💬'}
-          </Text>
-        </TouchableOpacity>
+        {/* Group info or Ephemeral mode toggle */}
+        {isGroup ? (
+          <TouchableOpacity
+            onPress={() => {
+              // TODO: Navigate to group info screen
+              Alert.alert('Group Info', `Members:\n${groupParticipants.filter(p => p.is_active).map(p => `• ${p.username}`).join('\n')}`);
+            }}
+            style={[{
+              padding: 8,
+              borderRadius: 20,
+              backgroundColor: currentTheme.background,
+              borderWidth: 1,
+              borderColor: '#10b981'
+            }]}
+          >
+            <Text style={[{
+              color: '#10b981',
+              fontSize: 16
+            }]}>
+              ℹ️
+            </Text>
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity
+            onPress={() => setEphemeralMode(!ephemeralMode)}
+            style={[{
+              padding: 8,
+              borderRadius: 20,
+              backgroundColor: ephemeralMode ? currentTheme.primary : currentTheme.background,
+              borderWidth: 1,
+              borderColor: currentTheme.primary
+            }]}
+          >
+            <Text style={[{
+              color: ephemeralMode ? currentTheme.background : currentTheme.primary,
+              fontSize: 16
+            }]}>
+              {ephemeralMode ? '👻' : '💬'}
+            </Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       {/* Messages List */}

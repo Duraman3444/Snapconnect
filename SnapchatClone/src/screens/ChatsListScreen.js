@@ -55,7 +55,7 @@ export default function ChatsListScreen({ navigation }) {
     if (!currentUser?.id) return;
 
     try {
-      // Get all conversations where current user is a participant
+      // Get all conversations where current user is a participant (1-on-1 and groups)
       const { data: conversationsData, error } = await supabase
         .from('conversations')
         .select('*')
@@ -68,19 +68,63 @@ export default function ChatsListScreen({ navigation }) {
         return;
       }
 
+      // Get group conversations where user is a participant
+      const { data: groupConversations, error: groupError } = await supabase
+        .from('conversations')
+        .select(`
+          *,
+          group_participants!inner(user_id, is_active)
+        `)
+        .eq('is_group', true)
+        .eq('group_participants.user_id', currentUser.id)
+        .eq('group_participants.is_active', true)
+        .order('last_message_at', { ascending: false });
+
+      if (groupError) {
+        console.error('Error fetching group conversations:', groupError);
+      }
+
+      // Combine and deduplicate conversations
+      const allConversations = [...conversationsData];
+      if (groupConversations) {
+        groupConversations.forEach(group => {
+          if (!allConversations.find(conv => conv.id === group.id)) {
+            allConversations.push(group);
+          }
+        });
+      }
+
+      // Sort by last message time
+      allConversations.sort((a, b) => new Date(b.last_message_at) - new Date(a.last_message_at));
+
       // Get user profiles and messages for each conversation
       const processedConversations = await Promise.all(
-        conversationsData.map(async (conversation) => {
-          // Get the other participant's profile
-          const otherParticipantId = conversation.participant_one_id === currentUser.id 
-            ? conversation.participant_two_id 
-            : conversation.participant_one_id;
+        allConversations.map(async (conversation) => {
+          let otherParticipant = null;
+          let participantNames = [];
 
-          const { data: otherParticipant } = await supabase
-            .from('profiles')
-            .select('*')
-            .eq('id', otherParticipantId)
-            .single();
+          if (conversation.is_group) {
+            // For group chats, get all participants
+            const { data: participants } = await supabase
+              .rpc('get_group_participants', { conversation_id: conversation.id });
+            
+            participantNames = participants
+              ?.filter(p => p.is_active && p.user_id !== currentUser.id)
+              ?.map(p => p.username) || [];
+          } else {
+            // For 1-on-1 chats, get the other participant's profile
+            const otherParticipantId = conversation.participant_one_id === currentUser.id 
+              ? conversation.participant_two_id 
+              : conversation.participant_one_id;
+
+            const { data: otherParticipantData } = await supabase
+              .from('profiles')
+              .select('*')
+              .eq('id', otherParticipantId)
+              .single();
+
+            otherParticipant = otherParticipantData;
+          }
 
           // Get messages for this conversation
           const { data: messages } = await supabase
@@ -101,6 +145,7 @@ export default function ChatsListScreen({ navigation }) {
           return {
             ...conversation,
             otherParticipant,
+            participantNames,
             lastMessage,
             unreadCount
           };
@@ -153,8 +198,33 @@ export default function ChatsListScreen({ navigation }) {
   const openChat = (conversation) => {
     navigation.navigate('Chat', {
       conversationId: conversation.id,
-      otherUser: conversation.otherParticipant
+      otherUser: conversation.is_group ? null : conversation.otherParticipant,
+      isGroup: conversation.is_group,
+      groupName: conversation.group_name,
+      groupDescription: conversation.group_description
     });
+  };
+
+  const getConversationDisplayName = (item) => {
+    if (item.is_group) {
+      return item.group_name || 'Group Chat';
+    }
+    return item.otherParticipant?.username || 'Unknown User';
+  };
+
+  const getConversationSubtitle = (item) => {
+    if (item.is_group && item.participantNames?.length > 0) {
+      return item.participantNames.slice(0, 3).join(', ') + 
+        (item.participantNames.length > 3 ? ` and ${item.participantNames.length - 3} others` : '');
+    }
+    return item.otherParticipant?.username || '';
+  };
+
+  const getAvatarText = (item) => {
+    if (item.is_group) {
+      return item.group_name?.charAt(0).toUpperCase() || 'G';
+    }
+    return item.otherParticipant?.username?.charAt(0).toUpperCase() || '?';
   };
 
   const renderConversationItem = ({ item }) => (
@@ -180,21 +250,45 @@ export default function ChatsListScreen({ navigation }) {
     >
       {/* Avatar */}
       <View style={[{
-        backgroundColor: currentTheme.primary,
+        backgroundColor: item.is_group ? '#10b981' : currentTheme.primary, // Green for groups
         borderRadius: 30,
         width: 60,
         height: 60,
         justifyContent: 'center',
         alignItems: 'center',
-        marginRight: 16
+        marginRight: 16,
+        position: 'relative'
       }]}>
         <Text style={[{
           color: currentTheme.background,
           fontWeight: 'bold',
           fontSize: 24
         }]}>
-          {item.otherParticipant?.username?.charAt(0).toUpperCase() || '?'}
+          {getAvatarText(item)}
         </Text>
+        {item.is_group && (
+          <View style={[{
+            position: 'absolute',
+            bottom: -2,
+            right: -2,
+            backgroundColor: '#10b981',
+            borderRadius: 8,
+            width: 16,
+            height: 16,
+            justifyContent: 'center',
+            alignItems: 'center',
+            borderWidth: 2,
+            borderColor: currentTheme.surface
+          }]}>
+            <Text style={[{
+              color: 'white',
+              fontSize: 10,
+              fontWeight: 'bold'
+            }]}>
+              👥
+            </Text>
+          </View>
+        )}
       </View>
 
       {/* Conversation Details */}
@@ -203,9 +297,9 @@ export default function ChatsListScreen({ navigation }) {
           <Text style={[{
             fontWeight: 'bold',
             fontSize: 18,
-            color: currentTheme.primary
+            color: item.is_group ? '#10b981' : currentTheme.primary
           }]}>
-            {item.otherParticipant?.username || 'Unknown User'}
+            {getConversationDisplayName(item)}
           </Text>
           
           {item.lastMessage && (
@@ -219,17 +313,30 @@ export default function ChatsListScreen({ navigation }) {
         </View>
 
         <View style={[{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }]}>
-          <Text 
-            style={[{
-              fontSize: 14,
-              color: currentTheme.textSecondary,
-              flex: 1,
-              marginRight: 8
-            }]}
-            numberOfLines={1}
-          >
-            {getLastMessagePreview(item.lastMessage)}
-          </Text>
+          <View style={{ flex: 1, marginRight: 8 }}>
+            {item.is_group && getConversationSubtitle(item) && (
+              <Text 
+                style={[{
+                  fontSize: 12,
+                  color: currentTheme.textSecondary,
+                  fontStyle: 'italic'
+                }]}
+                numberOfLines={1}
+              >
+                {getConversationSubtitle(item)}
+              </Text>
+            )}
+            <Text 
+              style={[{
+                fontSize: 14,
+                color: currentTheme.textSecondary,
+                flex: 1
+              }]}
+              numberOfLines={1}
+            >
+              {getLastMessagePreview(item.lastMessage)}
+            </Text>
+          </View>
           
           {item.unreadCount > 0 && (
             <View style={[{
@@ -305,23 +412,43 @@ export default function ChatsListScreen({ navigation }) {
           💬 Chats
         </Text>
         
-        <TouchableOpacity
-          onPress={() => navigation.navigate('Friends')}
-          style={[{
-            backgroundColor: currentTheme.primary,
-            borderRadius: 20,
-            paddingHorizontal: 16,
-            paddingVertical: 8
-          }]}
-        >
-          <Text style={[{
-            color: currentTheme.background,
-            fontWeight: 'bold',
-            fontSize: 14
-          }]}>
-            ➕ New Chat
-          </Text>
-        </TouchableOpacity>
+        <View style={{ flexDirection: 'row', gap: 8 }}>
+          <TouchableOpacity
+            onPress={() => navigation.navigate('CreateGroup')}
+            style={[{
+              backgroundColor: '#10b981',
+              borderRadius: 20,
+              paddingHorizontal: 12,
+              paddingVertical: 8
+            }]}
+          >
+            <Text style={[{
+              color: 'white',
+              fontWeight: 'bold',
+              fontSize: 14
+            }]}>
+              👥 Group
+            </Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity
+            onPress={() => navigation.navigate('Friends')}
+            style={[{
+              backgroundColor: currentTheme.primary,
+              borderRadius: 20,
+              paddingHorizontal: 16,
+              paddingVertical: 8
+            }]}
+          >
+            <Text style={[{
+              color: currentTheme.background,
+              fontWeight: 'bold',
+              fontSize: 14
+            }]}>
+              ➕ New Chat
+            </Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Conversations List */}
