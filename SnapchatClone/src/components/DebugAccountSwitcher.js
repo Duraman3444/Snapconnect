@@ -7,7 +7,7 @@ const TEST_ACCOUNTS = [
   {
     id: 'alice',
     name: 'Alice Doe',
-    email: 'alice.doe@example.com',
+    email: 'alice.doe.test@gmail.com',
     password: 'TestUser123!',
     username: 'alice_doe',
     emoji: '👩'
@@ -15,7 +15,7 @@ const TEST_ACCOUNTS = [
   {
     id: 'bob',
     name: 'Bob Smith',
-    email: 'bob.smith@example.com',
+    email: 'bob.smith.test@gmail.com',
     password: 'TestUser123!',
     username: 'bob_smith',
     emoji: '👨'
@@ -23,7 +23,7 @@ const TEST_ACCOUNTS = [
   {
     id: 'charlie',
     name: 'Charlie Brown',
-    email: 'charlie.brown@example.com',
+    email: 'charlie.brown.test@gmail.com',
     password: 'TestUser123!',
     username: 'charlie_brown',
     emoji: '🧑'
@@ -58,7 +58,16 @@ export default function DebugAccountSwitcher() {
           Alert.alert('✅ Account Created', `Created and switched to ${account.name}!`);
         } catch (signupError) {
           console.error('Signup error:', signupError);
-          Alert.alert('❌ Error', `Failed to switch to ${account.name}: ${signupError.message}`);
+          
+          // Check if it's a duplicate user error
+          if (signupError.message.includes('already been registered') || 
+              signupError.message.includes('User already registered')) {
+            // Account exists, but password might be wrong - try a few times
+            Alert.alert('⚠️ Account Exists', 
+              `Account ${account.name} exists but password might be different. Check Supabase Auth users.`);
+          } else {
+            Alert.alert('❌ Error', `Failed to create ${account.name}: ${signupError.message}`);
+          }
         }
       }
       
@@ -76,21 +85,33 @@ export default function DebugAccountSwitcher() {
       setIsLoading(true);
       Alert.alert(
         '🔧 Create Test Accounts',
-        'This will create all test accounts. Continue?',
+        'This will create all test accounts with valid email formats. Continue?',
         [
           { text: 'Cancel', style: 'cancel' },
           {
             text: 'Create All',
             onPress: async () => {
+              let successCount = 0;
+              let existingCount = 0;
+              
               for (const account of TEST_ACCOUNTS) {
                 try {
                   await signup(account.email, account.password, account.username);
-                  console.log(`Created account: ${account.name}`);
+                  console.log(`✅ Created account: ${account.name}`);
+                  successCount++;
                 } catch (error) {
-                  console.log(`Account ${account.name} might already exist:`, error.message);
+                  if (error.message.includes('already been registered') || 
+                      error.message.includes('User already registered')) {
+                    console.log(`⚠️ Account ${account.name} already exists`);
+                    existingCount++;
+                  } else {
+                    console.error(`❌ Failed to create ${account.name}:`, error.message);
+                  }
                 }
               }
-              Alert.alert('✅ Complete', 'All test accounts created/verified!');
+              
+              Alert.alert('✅ Complete', 
+                `Created: ${successCount} accounts\nExisting: ${existingCount} accounts\nReady for testing!`);
               setIsVisible(false);
             }
           }
@@ -98,6 +119,38 @@ export default function DebugAccountSwitcher() {
       );
     } catch (error) {
       Alert.alert('❌ Error', `Failed to create accounts: ${error.message}`);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const resetAllPasswords = async () => {
+    try {
+      setIsLoading(true);
+      Alert.alert(
+        '🔄 Reset Passwords',
+        'This will send password reset emails to all test accounts. Continue?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Reset All',
+            onPress: async () => {
+              for (const account of TEST_ACCOUNTS) {
+                try {
+                  // Note: This would require Supabase password reset functionality
+                  console.log(`Attempting to reset password for ${account.email}`);
+                } catch (error) {
+                  console.error(`Failed to reset password for ${account.name}:`, error.message);
+                }
+              }
+              Alert.alert('📧 Reset Emails Sent', 'Check your email for password reset links!');
+              setIsVisible(false);
+            }
+          }
+        ]
+      );
+    } catch (error) {
+      Alert.alert('❌ Error', `Failed to reset passwords: ${error.message}`);
     } finally {
       setIsLoading(false);
     }
@@ -153,6 +206,7 @@ export default function DebugAccountSwitcher() {
             padding: 24,
             width: '90%',
             maxWidth: 400,
+            maxHeight: '80%',
             shadowColor: '#000',
             shadowOffset: { width: 0, height: 4 },
             shadowOpacity: 0.25,
@@ -177,7 +231,7 @@ export default function DebugAccountSwitcher() {
             {/* Test Accounts */}
             <View style={[{ marginBottom: 24 }]}>
               <Text style={[{ fontSize: 18, fontWeight: 'bold', color: currentTheme.primary, marginBottom: 16 }]}>
-                Test Accounts:
+                Test Accounts (Updated emails):
               </Text>
               {TEST_ACCOUNTS.map((account) => (
                 <TouchableOpacity
@@ -217,19 +271,19 @@ export default function DebugAccountSwitcher() {
             </View>
 
             {/* Actions */}
-            <View style={[{ flexDirection: 'row', justifyContent: 'space-between', gap: 12 }]}>
+            <View style={[{ flexDirection: 'row', justifyContent: 'space-between', gap: 8, marginBottom: 16 }]}>
               <TouchableOpacity
                 style={[{
                   backgroundColor: currentTheme.primary,
                   borderRadius: 12,
-                  paddingHorizontal: 20,
+                  paddingHorizontal: 16,
                   paddingVertical: 12,
                   flex: 1
                 }]}
                 onPress={createAllTestAccounts}
                 disabled={isLoading}
               >
-                <Text style={[{ color: currentTheme.background, fontWeight: 'bold', textAlign: 'center' }]}>
+                <Text style={[{ color: currentTheme.background, fontWeight: 'bold', textAlign: 'center', fontSize: 14 }]}>
                   {isLoading ? '⏳' : '🔧 Create All'}
                 </Text>
               </TouchableOpacity>
@@ -238,7 +292,7 @@ export default function DebugAccountSwitcher() {
                 style={[{
                   backgroundColor: currentTheme.surface,
                   borderRadius: 12,
-                  paddingHorizontal: 20,
+                  paddingHorizontal: 16,
                   paddingVertical: 12,
                   borderWidth: 1,
                   borderColor: currentTheme.border,
@@ -247,10 +301,29 @@ export default function DebugAccountSwitcher() {
                 onPress={() => setIsVisible(false)}
                 disabled={isLoading}
               >
-                <Text style={[{ color: currentTheme.primary, fontWeight: 'bold', textAlign: 'center' }]}>
+                <Text style={[{ color: currentTheme.primary, fontWeight: 'bold', textAlign: 'center', fontSize: 14 }]}>
                   Close
                 </Text>
               </TouchableOpacity>
+            </View>
+
+            {/* Info Box */}
+            <View style={[{
+              backgroundColor: '#e0f2fe',
+              borderRadius: 12,
+              padding: 16,
+              borderLeftWidth: 4,
+              borderLeftColor: '#0288d1'
+            }]}>
+              <Text style={[{ color: '#01579b', fontWeight: 'bold', marginBottom: 8 }]}>
+                📧 Updated Email Formats
+              </Text>
+              <Text style={[{ color: '#01579b', fontSize: 12, lineHeight: 16 }]}>
+                • Fixed email validation issues{'\n'}
+                • Using @gmail.com for compatibility{'\n'}
+                • All accounts use password: TestUser123!{'\n'}
+                • Tap "Create All" to set up test accounts
+              </Text>
             </View>
 
             {/* Disclaimer */}

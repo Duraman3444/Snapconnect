@@ -29,156 +29,185 @@ The friend system has been completely migrated from Firebase to Supabase with pr
 - ✅ Added proper loading states
 - ✅ Added refresh buttons and functionality
 
+### 5. **Email Validation Fix** 🆕
+- ✅ Fixed invalid @example.com email addresses
+- ✅ Updated to valid @gmail.com test emails
+- ✅ Supabase now accepts all test accounts
+
+## 🧪 **Updated Test Accounts**
+
+### **Test User 1:**
+- **Email:** `alice.doe.test@gmail.com` *(Updated)*
+- **Password:** `TestUser123!`
+- **Username:** `alice_doe`
+
+### **Test User 2:**
+- **Email:** `bob.smith.test@gmail.com` *(Updated)*
+- **Password:** `TestUser123!`
+- **Username:** `bob_smith`
+
+### **Test User 3:**
+- **Email:** `charlie.brown.test@gmail.com` *(New)*
+- **Password:** `TestUser123!`
+- **Username:** `charlie_brown`
+
+## 🔧 **Using the Debug Account Switcher**
+
+### **Step 1: Open Debug Panel**
+1. Look for the **red 🔧 button** in the bottom-left corner
+2. Tap it to open the account switcher
+
+### **Step 2: Create Test Accounts**
+1. Tap **"🔧 Create All"** button
+2. This will create all test accounts with valid emails
+3. You'll see a success message with creation stats
+
+### **Step 3: Switch Between Accounts**
+1. Tap any account card to switch to it
+2. The app will logout current user and login to selected account
+3. If account doesn't exist, it creates it automatically
+
 ## 🧪 **How to Test Each Feature**
 
 ### **Prerequisites**
 1. Make sure Supabase database is set up with the SQL script from `supabase-setup.sql`
 2. Start the app: `npm start` in SnapchatClone directory
-3. Create at least 2 test accounts for testing interactions
+3. Use the debug switcher to create test accounts
 
 ### **1. User Registration & Authentication**
 ```bash
-# Test Scenario: New User Signup
-✓ Open app → Should show Login screen
-✓ Tap "Sign Up" → Enter email, password, username
-✓ Submit → Should create account and profile automatically
-✓ Check Supabase profiles table → New profile should exist
+# Test Scenario: Debug Account Creation
+✓ Open app → Tap 🔧 debug button
+✓ Tap "Create All" → Should create all accounts
+✓ Switch between accounts → Should work instantly
 
 # Expected Results:
-- Profile created in profiles table
-- User can login immediately
-- Username is properly stored
+- All profiles created in profiles table
+- Can switch between users easily
+- Valid email formats accepted by Supabase
 ```
 
 ### **2. Friend Search & Discovery**
 ```bash
 # Test Scenario: Search for Users
+✓ Switch to Alice using debug switcher
 ✓ Go to Friends screen
-✓ Enter username in search bar
+✓ Search for "bob" in search bar
 ✓ Hit search button
 
 # Expected Results:
-- Shows matching users (case-insensitive)
-- Current user not shown in results
-- Shows "Add" button for non-friends
-- Shows "Remove" button for existing friends
-- Shows "Pending" status for sent requests
+- Shows Bob Smith in results
+- Shows "Add" button (since not friends yet)
+- Search is case-insensitive
+- Current user (Alice) not shown in results
 ```
 
 ### **3. Friend Request System**
 ```bash
 # Test Scenario: Send Friend Request
-✓ Search for another user
-✓ Tap "Add" button
-✓ Should show "Friend request sent!" alert
+✓ As Alice, search for Bob
+✓ Tap "➕ Add" button
+✓ Should show "🎉 Friend request sent!" alert
 
-# Test in Supabase:
-✓ Check friendships table → New row with status='pending'
-✓ user_id = sender, friend_id = recipient
-
-# Test Scenario: Receive Friend Request
-✓ Login as the other user
+# Test in Debug Switcher:
+✓ Tap 🔧 → Switch to Bob
 ✓ Go to Friends screen
-✓ Should see "Friend Requests" section with pending request
-✓ Tap "Accept" → Should show success alert
-✓ Both users should now see each other in "My Friends"
+✓ Should see "Friend Requests (1)" section
+✓ Should see Alice's request with Accept/Reject buttons
+✓ Tap "✓ Accept" → Should show success alert
 
-# Test in Supabase:
-✓ Check friendships table → status updated to 'accepted'
+# Verify Both Users:
+✓ Both Alice and Bob should now see each other in "My Friends"
 ```
 
 ### **4. Friend Management**
 ```bash
 # Test Scenario: View Friends List
-✓ Go to Friends screen
+✓ Go to Friends screen as any user
 ✓ Should see "My Friends" section with friend count
 ✓ Should show all accepted friendships
 
 # Test Scenario: Remove Friend
 ✓ Find friend in "My Friends" list
-✓ Tap "Remove" button
+✓ Tap "❌ Remove" button
 ✓ Should show confirmation alert
-✓ Friend should disappear from list
-
-# Test in Supabase:
-✓ Check friendships table → Row should be deleted
+✓ Friend should disappear from both users' lists
 ```
 
 ### **5. Snap Sending & Receiving**
 ```bash
 # Test Scenario: Send Snap to Friend
+✓ Switch to Alice using debug switcher
 ✓ Go to Camera screen
 ✓ Take a photo
-✓ Tap send button → Should show friend selection modal
-✓ Select friend(s) and send
+✓ Tap send button → Should show friend selection
+✓ Select Bob and send
 ✓ Should show success message
 
 # Test Scenario: Receive Snap
-✓ Login as recipient
+✓ Switch to Bob using debug switcher
 ✓ Go to Home screen
-✓ Should see new snap with "NEW" badge
-✓ Tap to view → Should open in Stories screen with timer
-✓ Wait for timer or tap to close
-
-# Test in Supabase:
-✓ Check snaps table → New snap with viewed=false
-✓ After viewing → viewed=true, viewed_at timestamp
+✓ Should see Alice's snap with "NEW" badge
+✓ Tap to view → Should open with 10-second timer
 ```
 
 ### **6. Stories System**
 ```bash
 # Test Scenario: Create Story
+✓ Switch to Charlie using debug switcher
 ✓ Go to Camera screen
 ✓ Take photo → Tap "Add to Story"
-✓ Should upload to stories
+✓ Should upload successfully
 
 # Test Scenario: View Stories
+✓ Switch to Alice using debug switcher
 ✓ Go to Stories screen
-✓ Should see stories from friends
-✓ Tap to view with timer countdown
-✓ Should track viewers
-
-# Test in Supabase:
-✓ Check stories table → New story entry
-✓ Check viewers array → Should include your user ID after viewing
+✓ Should see Charlie's story
+✓ Tap to view → Should show with timer and track viewers
 ```
 
-### **7. Real-time Features**
+### **7. Three-Way Testing**
 ```bash
-# Test Scenario: Real-time Snap Notifications
-✓ Have two devices/accounts open
-✓ Send snap from Device A
-✓ Device B should update automatically (may need to refresh)
-
-# Test Scenario: Pull-to-Refresh
-✓ Pull down on Friends screen → Should reload friends list
-✓ Pull down on Home screen → Should reload snaps
-✓ Pull down on Stories screen → Should reload stories
+# Test Scenario: Multi-User Interactions
+✓ Alice sends friend requests to Bob and Charlie
+✓ Bob accepts Alice's request
+✓ Charlie accepts Alice's request
+✓ Alice sends snap to both Bob and Charlie
+✓ Bob and Charlie both receive the snap
+✓ Test group dynamics and multiple friendships
 ```
 
-## 🐛 **Common Issues & Solutions**
+## 🐛 **Troubleshooting**
 
-### **Issue: "User not found" when searching**
-**Solution:** Make sure the username exists in the profiles table and search is case-insensitive.
+### **Fixed: Email Validation Errors**
+- ❌ **Old Problem:** `@example.com` emails rejected by Supabase
+- ✅ **Solution:** Updated to `@gmail.com` test emails
+- ✅ **Result:** All test accounts now work properly
 
-### **Issue: Friend requests not appearing**
-**Solution:** Check that the friendship row has the correct friend_id matching the logged-in user.
+### **If accounts won't create:**
+1. Check Supabase dashboard → Authentication → Users
+2. Make sure RLS policies are properly set up
+3. Try the "Create All" button multiple times
 
-### **Issue: Snaps not loading**
-**Solution:** Verify recipient_id in snaps table matches the user ID, and expires_at is in the future.
+### **If friend requests don't appear:**
+1. Pull down to refresh the Friends screen
+2. Check Supabase → Table Editor → friendships table
+3. Verify the friend_id matches the logged-in user
 
-### **Issue: Real-time updates not working**
-**Solution:** Check Supabase real-time settings and ensure subscriptions are properly set up.
+### **If switching accounts fails:**
+1. Check console logs for specific errors
+2. Manually logout and try again
+3. Clear app data/cache if needed
 
 ## 📊 **Database Verification Queries**
 
-Use these SQL queries in Supabase SQL Editor to verify data:
-
 ```sql
--- Check all profiles
-SELECT * FROM profiles ORDER BY created_at DESC;
+-- Check all test accounts
+SELECT * FROM profiles 
+WHERE email LIKE '%test@gmail.com' 
+ORDER BY created_at DESC;
 
--- Check friendships
+-- Check friendships between test users
 SELECT 
   f.*,
   u1.username as user_username,
@@ -186,57 +215,44 @@ SELECT
 FROM friendships f
 JOIN profiles u1 ON f.user_id = u1.id
 JOIN profiles u2 ON f.friend_id = u2.id
+WHERE u1.email LIKE '%test@gmail.com' 
+   OR u2.email LIKE '%test@gmail.com'
 ORDER BY f.created_at DESC;
-
--- Check snaps
-SELECT 
-  s.*,
-  p.username as sender_name
-FROM snaps s
-JOIN profiles p ON s.sender_id = p.id
-ORDER BY s.created_at DESC;
-
--- Check stories
-SELECT 
-  st.*,
-  p.username
-FROM stories st
-JOIN profiles p ON st.user_id = p.id
-ORDER BY st.created_at DESC;
 ```
 
-## ✅ **Testing Checklist**
+## ✅ **Updated Testing Checklist**
 
-- [ ] User registration creates profile automatically
-- [ ] Friend search works (case-insensitive)
-- [ ] Friend requests can be sent
-- [ ] Friend requests appear for recipients
+- [ ] Debug switcher appears (red 🔧 button)
+- [ ] "Create All" creates test accounts successfully
+- [ ] Can switch between Alice, Bob, and Charlie
+- [ ] Email validation works (no more @example.com errors)
+- [ ] Friend search finds test users
+- [ ] Friend requests can be sent and received
 - [ ] Friend requests can be accepted/rejected
-- [ ] Friends list shows all accepted friendships
-- [ ] Friends can be removed
-- [ ] Snaps can be sent to friends
-- [ ] Snaps appear in recipient's home screen
-- [ ] Snaps can be viewed with timer
-- [ ] Viewed snaps are marked as read
+- [ ] Friends list shows accepted friendships
+- [ ] Snaps can be sent between friends
+- [ ] Snaps appear with "NEW" badge
 - [ ] Stories can be created and viewed
-- [ ] Story viewers are tracked
-- [ ] Real-time updates work
-- [ ] Pull-to-refresh works on all screens
+- [ ] Three-way friend interactions work
+- [ ] Real-time updates function properly
 
 ## 🎉 **Success Criteria**
 
 ✅ **Phase 1 Priority 1 is COMPLETE when:**
-- All above tests pass
-- No Firebase references remain in code
-- All database operations use Supabase
-- Friend system works end-to-end
+- All test accounts create without email errors
+- Debug switcher enables easy account switching
+- Friend system works end-to-end between all test users
 - Real-time features are functional
-- UI is responsive and user-friendly
+- Multi-user scenarios work properly
 
-## 🚀 **Next Steps**
+## 🚀 **Quick Test Commands**
 
-With Priority 1 complete, you can now move to:
-- **Priority 2:** Implement Real-time Updates (Enhanced)
-- **Priority 3:** Add Video Recording
-- **Priority 4:** Improve Disappearing Messages
-- **Priority 5:** Add Group Messaging 
+```bash
+# Super Quick Friend Test:
+1. Tap 🔧 → Create All
+2. Switch to Alice → Friends → Search "bob" → Add
+3. Switch to Bob → Friends → Accept Alice's request
+4. Switch to Alice → Camera → Take photo → Send to Bob
+5. Switch to Bob → Home → View Alice's snap
+# ✅ If this works, friend system is operational!
+``` 
