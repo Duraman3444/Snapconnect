@@ -121,18 +121,28 @@ export default function CameraScreen({ navigation }) {
       
       console.log('Original photo URI:', photo.uri);
 
-      // ✅ STEP 1: Upload photo to Supabase Storage (like stories do)
-      const response = await fetch(photo.uri);
-      const blob = await response.blob();
-      
+      // ✅ STEP 1: Upload photo to Supabase Storage using ArrayBuffer approach
       const fileName = `messages/${currentUser.id}/${Date.now()}.jpg`;
+      
+      // Use ArrayBuffer for reliable upload
+      const response = await fetch(photo.uri);
+      const arrayBuffer = await response.arrayBuffer();
+      const uint8Array = new Uint8Array(arrayBuffer);
+      
+      console.log('Message photo file size:', uint8Array.length, 'bytes');
+
       const { data: uploadData, error: uploadError } = await supabase.storage
         .from('media')
-        .upload(fileName, blob, {
+        .upload(fileName, uint8Array, {
           contentType: 'image/jpeg',
         });
 
-      if (uploadError) throw uploadError;
+      if (uploadError) {
+        console.error('Photo upload error:', uploadError);
+        throw uploadError;
+      }
+
+      console.log('Photo upload successful:', uploadData);
 
       // ✅ STEP 2: Get public URL
       const { data: urlData } = supabase.storage
@@ -208,19 +218,30 @@ export default function CameraScreen({ navigation }) {
     try {
       setUploading(true);
       
-      // Convert photo to blob
-      const response = await fetch(photo.uri);
-      const blob = await response.blob();
+      console.log('Uploading story from URI:', photo.uri);
       
-      // Upload to Supabase Storage
+      // Use the same approach that works for messages
       const fileName = `stories/${currentUser.id}/${Date.now()}.jpg`;
+      
+      // Try reading the file as ArrayBuffer for more reliable upload
+      const response = await fetch(photo.uri);
+      const arrayBuffer = await response.arrayBuffer();
+      const uint8Array = new Uint8Array(arrayBuffer);
+      
+      console.log('Story file size:', uint8Array.length, 'bytes');
+
       const { data: uploadData, error: uploadError } = await supabase.storage
         .from('media')
-        .upload(fileName, blob, {
+        .upload(fileName, uint8Array, {
           contentType: 'image/jpeg',
         });
 
-      if (uploadError) throw uploadError;
+      if (uploadError) {
+        console.error('Story upload error:', uploadError);
+        throw uploadError;
+      }
+
+      console.log('Story upload successful:', uploadData);
 
       // Get public URL - UPDATED METHOD
       const { data: urlData } = supabase.storage
@@ -253,13 +274,16 @@ export default function CameraScreen({ navigation }) {
         viewers: []
       });
 
-      if (insertError) throw insertError;
+      if (insertError) {
+        console.error('Story database insert error:', insertError);
+        throw insertError;
+      }
       
       Alert.alert('Success', 'Story posted!');
       setPhoto(null);
       setShowActionModal(false);
     } catch (error) {
-      Alert.alert('Error', 'Failed to post story');
+      Alert.alert('Error', 'Failed to post story: ' + error.message);
       console.error('Upload story error:', error);
     } finally {
       setUploading(false);
