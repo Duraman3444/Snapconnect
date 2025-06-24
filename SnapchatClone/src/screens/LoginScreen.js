@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, TextInput, TouchableOpacity, Alert, KeyboardAvoidingView, Platform, StyleSheet } from 'react-native';
 import { useAuth } from '../context/AuthContext';
 
@@ -6,7 +6,20 @@ export default function LoginScreen({ navigation }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  const { login } = useAuth();
+  const [staySignedInChecked, setStaySignedInChecked] = useState(false);
+  const { login, getStoredEmail } = useAuth();
+
+  // Load stored email on component mount
+  useEffect(() => {
+    const loadStoredEmail = async () => {
+      const storedEmail = await getStoredEmail();
+      if (storedEmail) {
+        setEmail(storedEmail);
+        setStaySignedInChecked(true);
+      }
+    };
+    loadStoredEmail();
+  }, []);
 
   const handleLogin = async () => {
     if (!email || !password) {
@@ -17,7 +30,7 @@ export default function LoginScreen({ navigation }) {
     try {
       setLoading(true);
       console.log('Attempting login with:', email);
-      await login(email, password);
+      await login(email, password, staySignedInChecked);
       console.log('Login successful');
     } catch (error) {
       console.error('Login error:', error);
@@ -68,8 +81,24 @@ export default function LoginScreen({ navigation }) {
             />
           </View>
           
+          {/* Stay Signed In Checkbox */}
           <TouchableOpacity
-            className="bg-snapYellow rounded-full py-4 mt-8 shadow-lg"
+            className="flex-row items-center justify-center mt-4 mb-4"
+            onPress={() => setStaySignedInChecked(!staySignedInChecked)}
+            activeOpacity={0.7}
+          >
+            <View className={`w-6 h-6 border-2 rounded mr-3 flex items-center justify-center ${
+              staySignedInChecked ? 'bg-snapYellow border-snapYellow' : 'border-gray-400'
+            }`}>
+              {staySignedInChecked && (
+                <Text className="text-black font-bold text-sm">✓</Text>
+              )}
+            </View>
+            <Text className="text-gray-300 text-base">Stay signed in</Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity
+            className="bg-snapYellow rounded-full py-4 mt-4 shadow-lg"
             onPress={handleLogin}
             disabled={loading}
           >

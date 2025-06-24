@@ -1,4 +1,5 @@
 import React, { createContext, useState, useContext, useEffect } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { auth, db } from '../../firebaseConfig';
 
 const AuthContext = createContext();
@@ -14,6 +15,7 @@ export const useAuth = () => {
 export const AuthProvider = ({ children }) => {
   const [currentUser, setCurrentUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [staySignedIn, setStaySignedIn] = useState(false);
 
   const signup = async (email, password, username) => {
     try {
@@ -35,9 +37,22 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const login = async (email, password) => {
+  const login = async (email, password, rememberMe = false) => {
     try {
-      return await auth.signInWithEmailAndPassword(email, password);
+      const result = await auth.signInWithEmailAndPassword(email, password);
+      
+      // Store login preference
+      if (rememberMe) {
+        await AsyncStorage.setItem('staySignedIn', 'true');
+        await AsyncStorage.setItem('userEmail', email);
+        setStaySignedIn(true);
+      } else {
+        await AsyncStorage.removeItem('staySignedIn');
+        await AsyncStorage.removeItem('userEmail');
+        setStaySignedIn(false);
+      }
+      
+      return result;
     } catch (error) {
       console.error('Login error:', error);
       throw error;
@@ -46,6 +61,11 @@ export const AuthProvider = ({ children }) => {
 
   const logout = async () => {
     try {
+      // Clear stored login preferences
+      await AsyncStorage.removeItem('staySignedIn');
+      await AsyncStorage.removeItem('userEmail');
+      setStaySignedIn(false);
+      
       return await auth.signOut();
     } catch (error) {
       console.error('Logout error:', error);
@@ -53,7 +73,23 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  // Check stored login preferences on app load
+  const checkStoredPreferences = async () => {
+    try {
+      const storedStaySignedIn = await AsyncStorage.getItem('staySignedIn');
+      const storedEmail = await AsyncStorage.getItem('userEmail');
+      
+      if (storedStaySignedIn === 'true' && storedEmail) {
+        setStaySignedIn(true);
+      }
+    } catch (error) {
+      console.error('Error checking stored preferences:', error);
+    }
+  };
+
   useEffect(() => {
+    checkStoredPreferences();
+    
     const unsubscribe = auth.onAuthStateChanged(async (user) => {
       console.log('Auth state changed:', user?.uid || 'null');
       
@@ -84,12 +120,25 @@ export const AuthProvider = ({ children }) => {
     return unsubscribe;
   }, []);
 
+  // Get stored email for login convenience
+  const getStoredEmail = async () => {
+    try {
+      const storedEmail = await AsyncStorage.getItem('userEmail');
+      return storedEmail || '';
+    } catch (error) {
+      console.error('Error getting stored email:', error);
+      return '';
+    }
+  };
+
   const value = {
     currentUser,
     signup,
     login,
     logout,
-    loading
+    loading,
+    staySignedIn,
+    getStoredEmail
   };
 
   return (
