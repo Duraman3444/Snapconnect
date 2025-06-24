@@ -9,11 +9,13 @@ import {
   Modal,
   Switch,
   StyleSheet,
-  SafeAreaView
+  SafeAreaView,
+  KeyboardAvoidingView,
+  Platform,
+  Image
 } from 'react-native';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../context/SupabaseAuthContext';
 import { useTheme } from '../context/ThemeContext';
-import { auth, db } from '../../firebaseConfig';
 
 export default function ProfileScreen({ navigation }) {
   const { currentUser, logout } = useAuth();

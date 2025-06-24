@@ -1,105 +1,156 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, FlatList, TouchableOpacity, Image, Alert } from 'react-native';
-import { db } from '../../firebaseConfig';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../context/SupabaseAuthContext';
+import { useTheme } from '../context/ThemeContext';
 
 export default function HomeScreen({ navigation }) {
   const [snaps, setSnaps] = useState([]);
   const [loading, setLoading] = useState(true);
-  const { currentUser, logout } = useAuth();
+  const { currentUser, supabase } = useAuth();
+  const { currentTheme } = useTheme();
 
   useEffect(() => {
     if (!currentUser) return;
 
-    // Listen to snaps from friends using compat API
-    const unsubscribe = db.collection('snaps')
-      .where('userId', '!=', currentUser.uid)
-      .orderBy('createdAt', 'desc')
-      .onSnapshot((querySnapshot) => {
-        const snapsData = [];
-        querySnapshot.forEach((doc) => {
-          const snap = { id: doc.id, ...doc.data() };
-          // Only show snaps that haven't expired and haven't been viewed by current user
-          const expirationDate = snap.expiresAt?.toDate ? snap.expiresAt.toDate() : new Date(snap.expiresAt);
-          if (expirationDate > new Date() && !snap.viewers?.includes(currentUser.uid)) {
-            snapsData.push(snap);
-          }
-        });
-        setSnaps(snapsData);
-        setLoading(false);
-      }, (error) => {
+    loadSnaps();
+    
+    // Set up real-time subscription for new snaps
+    const subscription = supabase
+      .channel('snaps_channel')
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'snaps',
+        filter: `recipient_id=eq.${currentUser.id}`
+      }, (payload) => {
+        console.log('Real-time snap update:', payload);
+        loadSnaps(); // Reload snaps when there's a change
+      })
+      .subscribe();
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, [currentUser]);
+
+  const loadSnaps = async () => {
+    if (!currentUser?.id) return;
+
+    try {
+      // Get snaps sent to current user that haven't expired and haven't been viewed
+      const { data: snapsData, error } = await supabase
+        .from('snaps')
+        .select('*')
+        .eq('recipient_id', currentUser.id)
+        .eq('viewed', false)
+        .gt('expires_at', new Date().toISOString())
+        .order('created_at', { ascending: false });
+
+      if (error) {
         console.error('Error fetching snaps:', error);
         setLoading(false);
-      });
+        return;
+      }
 
-    return unsubscribe;
-  }, [currentUser]);
+      setSnaps(snapsData || []);
+      setLoading(false);
+    } catch (error) {
+      console.error('Error loading snaps:', error);
+      setLoading(false);
+    }
+  };
 
   const viewSnap = async (snap) => {
     try {
-      // Mark snap as viewed using compat API
-      await db.collection('snaps').doc(snap.id).update({
-        viewers: [...(snap.viewers || []), currentUser.uid]
-      });
+      // Mark snap as viewed
+      const { error } = await supabase
+        .from('snaps')
+        .update({ 
+          viewed: true,
+          viewed_at: new Date().toISOString()
+        })
+        .eq('id', snap.id);
+
+      if (error) {
+        console.error('Error marking snap as viewed:', error);
+        Alert.alert('Error', 'Failed to view snap');
+        return;
+      }
       
       // Navigate to story view
       navigation.navigate('Stories', { snap });
+      
+      // Reload snaps to remove the viewed one
+      loadSnaps();
     } catch (error) {
       Alert.alert('Error', 'Failed to view snap');
       console.error('View snap error:', error);
     }
   };
 
-  const handleLogout = async () => {
-    try {
-      await logout();
-    } catch (error) {
-      Alert.alert('Error', 'Failed to logout');
-    }
-  };
-
   const renderSnapItem = ({ item }) => (
     <TouchableOpacity
-      className="bg-snapGray rounded-xl mx-4 mb-4 p-4 shadow-lg border border-gray-600"
+      style={[{ 
+        backgroundColor: currentTheme.surface, 
+        borderRadius: 16, 
+        marginHorizontal: 16, 
+        marginBottom: 16, 
+        padding: 20, 
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 8,
+        elevation: 5,
+        borderWidth: 1, 
+        borderColor: currentTheme.border 
+      }]}
       onPress={() => viewSnap(item)}
     >
-      <View className="flex-row items-center mb-4">
-        <View className="bg-snapYellow rounded-full w-14 h-14 justify-center items-center mr-4">
-          <Text className="text-black font-bold text-xl">
-            {item.username?.charAt(0).toUpperCase()}
+      <View style={[{ flexDirection: 'row', alignItems: 'center', marginBottom: 16 }]}>
+        <View style={[{ backgroundColor: currentTheme.primary, borderRadius: 28, width: 56, height: 56, justifyContent: 'center', alignItems: 'center', marginRight: 16 }]}>
+          <Text style={[{ color: currentTheme.background, fontWeight: 'bold', fontSize: 20 }]}>
+            {item.sender_username?.charAt(0).toUpperCase()}
           </Text>
         </View>
-        <View className="flex-1">
-          <Text className="font-bold text-xl text-snapYellow">{item.username}</Text>
-          <Text className="text-gray-300 text-sm">
-            {item.createdAt?.toDate ? item.createdAt.toDate().toLocaleTimeString() : 'Just now'}
+        <View style={[{ flex: 1 }]}>
+          <Text style={[{ fontWeight: 'bold', fontSize: 20, color: currentTheme.primary }]}>
+            {item.sender_username}
           </Text>
+          <Text style={[{ color: currentTheme.textSecondary, fontSize: 14 }]}>
+            {new Date(item.created_at).toLocaleTimeString()}
+          </Text>
+        </View>
+        <View style={[{ backgroundColor: '#ef4444', borderRadius: 12, paddingHorizontal: 12, paddingVertical: 6 }]}>
+          <Text style={[{ color: 'white', fontSize: 12, fontWeight: 'bold' }]}>NEW</Text>
         </View>
       </View>
-      <View className="bg-gray-800 rounded-xl h-48 justify-center items-center">
-        <Text className="text-snapYellow text-2xl mb-2">📸</Text>
-        <Text className="text-snapYellow text-lg font-semibold">Tap to view snap</Text>
+      <View style={[{ backgroundColor: currentTheme.border, borderRadius: 12, height: 160, justifyContent: 'center', alignItems: 'center' }]}>
+        <Text style={[{ color: currentTheme.primary, fontSize: 32, marginBottom: 8 }]}>📸</Text>
+        <Text style={[{ color: currentTheme.primary, fontSize: 18, fontWeight: '600' }]}>Tap to view snap</Text>
+        <Text style={[{ color: currentTheme.textSecondary, fontSize: 14, marginTop: 4 }]}>
+          Expires: {new Date(item.expires_at).toLocaleString()}
+        </Text>
       </View>
     </TouchableOpacity>
   );
 
   return (
-    <View className="flex-1 bg-snapBlack">
+    <View style={[{ flex: 1, backgroundColor: currentTheme.background }]}>
       {/* Header */}
-      <View className="bg-snapBlack pt-14 pb-6 px-6 border-b border-gray-700">
-        <View className="flex-row justify-between items-center mb-2">
+      <View style={[{ backgroundColor: currentTheme.background, paddingTop: 56, paddingBottom: 24, paddingHorizontal: 24, borderBottomWidth: 1, borderBottomColor: currentTheme.border }]}>
+        <View style={[{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }]}>
           <TouchableOpacity onPress={() => navigation.navigate('Camera')}>
-            <Text className="text-snapYellow text-lg font-semibold">← Camera</Text>
+            <Text style={[{ color: currentTheme.primary, fontSize: 18, fontWeight: '600' }]}>← Camera</Text>
           </TouchableOpacity>
           <TouchableOpacity onPress={() => navigation.navigate('Profile')}>
-            <View className="bg-snapYellow rounded-full p-2">
-              <Text className="text-black font-bold text-lg">👤</Text>
+            <View style={[{ backgroundColor: currentTheme.primary, borderRadius: 20, padding: 8 }]}>
+              <Text style={[{ color: currentTheme.background, fontWeight: 'bold', fontSize: 16 }]}>👤</Text>
             </View>
           </TouchableOpacity>
         </View>
-        <View className="items-center">
-          <Text className="text-3xl font-bold text-snapYellow text-center">💬 Your Snaps</Text>
-          <Text className="text-gray-400 text-center mt-2">
+        <View style={[{ alignItems: 'center' }]}>
+          <Text style={[{ fontSize: 30, fontWeight: 'bold', color: currentTheme.primary, textAlign: 'center', marginBottom: 8 }]}>💬 Your Snaps</Text>
+          <Text style={[{ color: currentTheme.textSecondary, textAlign: 'center' }]}>
             Welcome back, {currentUser?.username || 'Friend'}! 👋
           </Text>
         </View>
@@ -107,31 +158,31 @@ export default function HomeScreen({ navigation }) {
 
       {/* Content */}
       {loading ? (
-        <View className="flex-1 justify-center items-center">
-          <Text className="text-2xl mb-4">⏳</Text>
-          <Text className="text-xl text-snapYellow font-semibold">Loading your snaps...</Text>
-          <Text className="text-gray-400 text-center mt-2">Just a moment!</Text>
+        <View style={[{ flex: 1, justifyContent: 'center', alignItems: 'center' }]}>
+          <Text style={[{ fontSize: 32, marginBottom: 16 }]}>⏳</Text>
+          <Text style={[{ fontSize: 20, color: currentTheme.primary, fontWeight: '600' }]}>Loading your snaps...</Text>
+          <Text style={[{ color: currentTheme.textSecondary, textAlign: 'center', marginTop: 8 }]}>Just a moment!</Text>
         </View>
       ) : snaps.length === 0 ? (
-        <View className="flex-1 justify-center items-center px-8">
-          <Text className="text-6xl mb-6">📭</Text>
-          <Text className="text-2xl text-snapYellow font-bold text-center mb-4">
+        <View style={[{ flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 32 }]}>
+          <Text style={[{ fontSize: 64, marginBottom: 24 }]}>📭</Text>
+          <Text style={[{ fontSize: 24, color: currentTheme.primary, fontWeight: 'bold', textAlign: 'center', marginBottom: 16 }]}>
             No new snaps yet!
           </Text>
-          <Text className="text-gray-400 text-center text-lg mb-8 leading-6">
+          <Text style={[{ color: currentTheme.textSecondary, textAlign: 'center', fontSize: 18, marginBottom: 32, lineHeight: 26 }]}>
             Add friends and start sharing moments to see snaps appear here. Your adventure awaits! ✨
           </Text>
           <TouchableOpacity
-            className="bg-snapYellow rounded-full px-8 py-4 shadow-lg"
+            style={[{ backgroundColor: currentTheme.primary, borderRadius: 24, paddingHorizontal: 32, paddingVertical: 16, marginBottom: 16 }]}
             onPress={() => navigation.navigate('Camera')}
           >
-            <Text className="text-black font-bold text-lg">📷 Take Your First Snap</Text>
+            <Text style={[{ color: currentTheme.background, fontWeight: 'bold', fontSize: 18 }]}>📷 Take Your First Snap</Text>
           </TouchableOpacity>
           <TouchableOpacity
-            className="bg-gray-700 rounded-full px-8 py-4 mt-4"
+            style={[{ backgroundColor: currentTheme.surface, borderRadius: 24, paddingHorizontal: 32, paddingVertical: 16, borderWidth: 1, borderColor: currentTheme.border }]}
             onPress={() => navigation.navigate('Friends')}
           >
-            <Text className="text-snapYellow font-semibold text-lg">👥 Find Friends</Text>
+            <Text style={[{ color: currentTheme.primary, fontWeight: '600', fontSize: 18 }]}>👥 Find Friends</Text>
           </TouchableOpacity>
         </View>
       ) : (
@@ -141,42 +192,44 @@ export default function HomeScreen({ navigation }) {
           keyExtractor={(item) => item.id}
           contentContainerStyle={{ paddingTop: 20, paddingBottom: 120 }}
           showsVerticalScrollIndicator={false}
+          onRefresh={loadSnaps}
+          refreshing={loading}
         />
       )}
 
       {/* Bottom Navigation */}
-      <View className="absolute bottom-0 left-0 right-0 bg-snapGray border-t border-gray-600 shadow-lg">
-        <View className="flex-row justify-around py-4">
+      <View style={[{ position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: currentTheme.surface, borderTopWidth: 1, borderTopColor: currentTheme.border, shadowColor: '#000', shadowOffset: { width: 0, height: -2 }, shadowOpacity: 0.1, shadowRadius: 8, elevation: 10 }]}>
+        <View style={[{ flexDirection: 'row', justifyContent: 'around', paddingVertical: 16 }]}>
           <TouchableOpacity
             onPress={() => navigation.navigate('Friends')}
-            className="items-center flex-1"
+            style={[{ alignItems: 'center', flex: 1 }]}
           >
-            <Text className="text-3xl mb-1">👥</Text>
-            <Text className="text-xs text-snapYellow font-semibold">Friends</Text>
+            <Text style={[{ fontSize: 24, marginBottom: 4 }]}>👥</Text>
+            <Text style={[{ fontSize: 12, color: currentTheme.primary, fontWeight: '600' }]}>Friends</Text>
           </TouchableOpacity>
           
           <TouchableOpacity
             onPress={() => navigation.navigate('Camera')}
-            className="items-center flex-1"
+            style={[{ alignItems: 'center', flex: 1 }]}
           >
-            <Text className="text-3xl mb-1">📷</Text>
-            <Text className="text-xs text-snapYellow font-semibold">Camera</Text>
+            <Text style={[{ fontSize: 24, marginBottom: 4 }]}>📷</Text>
+            <Text style={[{ fontSize: 12, color: currentTheme.primary, fontWeight: '600' }]}>Camera</Text>
           </TouchableOpacity>
           
           <TouchableOpacity
             onPress={() => navigation.navigate('Stories')}
-            className="items-center flex-1"
+            style={[{ alignItems: 'center', flex: 1 }]}
           >
-            <Text className="text-3xl mb-1">📖</Text>
-            <Text className="text-xs text-snapYellow font-semibold">Stories</Text>
+            <Text style={[{ fontSize: 24, marginBottom: 4 }]}>📖</Text>
+            <Text style={[{ fontSize: 12, color: currentTheme.primary, fontWeight: '600' }]}>Stories</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
             onPress={() => navigation.navigate('Profile')}
-            className="items-center flex-1"
+            style={[{ alignItems: 'center', flex: 1 }]}
           >
-            <Text className="text-3xl mb-1">👤</Text>
-            <Text className="text-xs text-snapYellow font-semibold">Profile</Text>
+            <Text style={[{ fontSize: 24, marginBottom: 4 }]}>👤</Text>
+            <Text style={[{ fontSize: 12, color: currentTheme.primary, fontWeight: '600' }]}>Profile</Text>
           </TouchableOpacity>
         </View>
       </View>

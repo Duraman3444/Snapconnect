@@ -1,9 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { View, Text, TouchableOpacity, Alert, Image, StyleSheet, PanResponder, Dimensions, Modal, ScrollView, SafeAreaView } from 'react-native';
-import { CameraView, CameraType, useCameraPermissions } from 'expo-camera';
+import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as MediaLibrary from 'expo-media-library';
-import { storage, db } from '../../firebaseConfig';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../context/SupabaseAuthContext';
 import { useTheme } from '../context/ThemeContext';
 
 export default function CameraScreen({ navigation }) {
@@ -15,7 +14,7 @@ export default function CameraScreen({ navigation }) {
   const [selectedFriends, setSelectedFriends] = useState([]);
   const [friends, setFriends] = useState([]);
   const cameraRef = useRef();
-  const { currentUser, logout } = useAuth();
+  const { currentUser, logout, supabase } = useAuth();
   const { currentTheme } = useTheme();
 
   // Get screen dimensions for gesture detection
@@ -122,28 +121,44 @@ export default function CameraScreen({ navigation }) {
       const response = await fetch(photo.uri);
       const blob = await response.blob();
       
-      // Upload to Firebase Storage using compat API
-      const storageRef = storage.ref(`snaps/${currentUser.uid}/${Date.now()}.jpg`);
-      await storageRef.put(blob);
-      const downloadURL = await storageRef.getDownloadURL();
+      // Upload to Supabase Storage
+      const fileName = `snaps/${currentUser.id}/${Date.now()}.jpg`;
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('media')
+        .upload(fileName, blob, {
+          contentType: 'image/jpeg',
+        });
+
+      if (uploadError) throw uploadError;
+
+      // Get public URL
+      const { data: { publicUrl } } = supabase.storage
+        .from('media')
+        .getPublicUrl(fileName);
       
       // Create individual snaps for each selected friend
       const snapPromises = selectedFriends.map(friendId => {
         const selectedFriend = friends.find(f => f.id === friendId);
-        return db.collection('snaps').add({
-          senderId: currentUser.uid,
-          senderUsername: currentUser.username || 'Anonymous',
-          recipientId: friendId,
-          recipientUsername: selectedFriend?.username || 'Unknown',
-          imageUrl: downloadURL,
+        return supabase.from('snaps').insert({
+          sender_id: currentUser.id,
+          sender_username: currentUser.username || 'Anonymous',
+          recipient_id: friendId,
+          recipient_username: selectedFriend?.username || 'Unknown',
+          image_url: publicUrl,
           type: 'snap',
-          createdAt: new Date(),
-          expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 hours from now
+          created_at: new Date().toISOString(),
+          expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(), // 24 hours from now
           viewed: false
         });
       });
 
-      await Promise.all(snapPromises);
+      const results = await Promise.all(snapPromises);
+      
+      // Check if any inserts failed
+      const hasErrors = results.some(result => result.error);
+      if (hasErrors) {
+        console.error('Some snaps failed to send:', results.filter(r => r.error));
+      }
       
       const selectedFriendNames = selectedFriends.map(id => 
         friends.find(f => f.id === id)?.displayName || 'Unknown'
@@ -171,21 +186,33 @@ export default function CameraScreen({ navigation }) {
       const response = await fetch(photo.uri);
       const blob = await response.blob();
       
-      // Upload to Firebase Storage using compat API
-      const storageRef = storage.ref(`stories/${currentUser.uid}/${Date.now()}.jpg`);
-      await storageRef.put(blob);
-      const downloadURL = await storageRef.getDownloadURL();
+      // Upload to Supabase Storage
+      const fileName = `stories/${currentUser.id}/${Date.now()}.jpg`;
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('media')
+        .upload(fileName, blob, {
+          contentType: 'image/jpeg',
+        });
+
+      if (uploadError) throw uploadError;
+
+      // Get public URL
+      const { data: { publicUrl } } = supabase.storage
+        .from('media')
+        .getPublicUrl(fileName);
       
-      // Save story data to Firestore using compat API
-      await db.collection('stories').add({
-        userId: currentUser.uid,
+      // Save story data to Supabase
+      const { error: insertError } = await supabase.from('stories').insert({
+        user_id: currentUser.id,
         username: currentUser.username || 'Anonymous',
-        imageUrl: downloadURL,
+        image_url: publicUrl,
         type: 'story',
-        createdAt: new Date(),
-        expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 hours from now
+        created_at: new Date().toISOString(),
+        expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(), // 24 hours from now
         viewers: []
       });
+
+      if (insertError) throw insertError;
       
       Alert.alert('Success', 'Story shared with friends!');
       setPhoto(null);
@@ -212,8 +239,6 @@ export default function CameraScreen({ navigation }) {
       Alert.alert('Error', 'Failed to logout');
     }
   };
-
-
 
   if (!permission) {
     return <View className="flex-1 justify-center items-center bg-black" />;

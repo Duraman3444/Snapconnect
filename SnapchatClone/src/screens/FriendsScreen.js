@@ -1,15 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, TextInput, TouchableOpacity, FlatList, Alert, StyleSheet, PanResponder } from 'react-native';
-import { db } from '../../firebaseConfig';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../context/SupabaseAuthContext';
 import { useTheme } from '../context/ThemeContext';
 
 export default function FriendsScreen({ navigation }) {
   const [searchText, setSearchText] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [friends, setFriends] = useState([]);
+  const [pendingRequests, setPendingRequests] = useState([]);
   const [loading, setLoading] = useState(false);
-  const { currentUser } = useAuth();
+  const [refreshing, setRefreshing] = useState(false);
+  const { currentUser, supabase } = useAuth();
   const { currentTheme } = useTheme();
 
   // Swipe gesture for navigation
@@ -27,30 +28,74 @@ export default function FriendsScreen({ navigation }) {
   });
 
   useEffect(() => {
-    if (currentUser?.friends) {
+    if (currentUser) {
       loadFriends();
+      loadPendingRequests();
     }
   }, [currentUser]);
 
   const loadFriends = async () => {
     try {
-      if (!currentUser?.friends || currentUser.friends.length === 0) {
-        setFriends([]);
+      if (!currentUser?.id) return;
+
+      // Get accepted friendships where current user is either user_id or friend_id
+      const { data: friendships, error } = await supabase
+        .from('friendships')
+        .select(`
+          *,
+          user_profile:profiles!friendships_user_id_fkey(*),
+          friend_profile:profiles!friendships_friend_id_fkey(*)
+        `)
+        .or(`user_id.eq.${currentUser.id},friend_id.eq.${currentUser.id}`)
+        .eq('status', 'accepted');
+
+      if (error) {
+        console.error('Error loading friends:', error);
         return;
       }
 
-      // Get friends data using compat API
-      const friendsData = [];
-      for (const friendId of currentUser.friends) {
-        const friendDoc = await db.collection('users').doc(friendId).get();
-        if (friendDoc.exists) {
-          friendsData.push({ id: friendDoc.id, ...friendDoc.data() });
+      // Extract friend profiles (the other person in each friendship)
+      const friendProfiles = friendships.map(friendship => {
+        if (friendship.user_id === currentUser.id) {
+          return friendship.friend_profile;
+        } else {
+          return friendship.user_profile;
         }
-      }
-      
-      setFriends(friendsData);
+      }).filter(profile => profile); // Remove any null profiles
+
+      setFriends(friendProfiles);
     } catch (error) {
       console.error('Error loading friends:', error);
+    }
+  };
+
+  const loadPendingRequests = async () => {
+    try {
+      if (!currentUser?.id) return;
+
+      // Get pending friend requests sent TO current user
+      const { data: requests, error } = await supabase
+        .from('friendships')
+        .select(`
+          *,
+          user_profile:profiles!friendships_user_id_fkey(*)
+        `)
+        .eq('friend_id', currentUser.id)
+        .eq('status', 'pending');
+
+      if (error) {
+        console.error('Error loading pending requests:', error);
+        return;
+      }
+
+      const requestProfiles = requests.map(request => ({
+        ...request.user_profile,
+        friendship_id: request.id
+      }));
+
+      setPendingRequests(requestProfiles);
+    } catch (error) {
+      console.error('Error loading pending requests:', error);
     }
   };
 
@@ -63,22 +108,21 @@ export default function FriendsScreen({ navigation }) {
     try {
       setLoading(true);
       
-      // Search users using compat API
-      const querySnapshot = await db.collection('users')
-        .where('username', '>=', searchText.toLowerCase())
-        .where('username', '<=', searchText.toLowerCase() + '\uf8ff')
-        .get();
+      // Search users by username (case insensitive)
+      const { data: users, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .ilike('username', `%${searchText.toLowerCase()}%`)
+        .neq('id', currentUser.id) // Don't show current user
+        .limit(20);
       
-      const users = [];
-      querySnapshot.forEach((doc) => {
-        const userData = { id: doc.id, ...doc.data() };
-        // Don't show current user in search results
-        if (userData.id !== currentUser.uid) {
-          users.push(userData);
-        }
-      });
-      
-      setSearchResults(users);
+      if (error) {
+        console.error('Search error:', error);
+        Alert.alert('Error', 'Failed to search users');
+        return;
+      }
+
+      setSearchResults(users || []);
     } catch (error) {
       Alert.alert('Error', 'Failed to search users');
       console.error('Search error:', error);
@@ -87,45 +131,110 @@ export default function FriendsScreen({ navigation }) {
     }
   };
 
-  const addFriend = async (friendId) => {
+  const sendFriendRequest = async (friendId) => {
     try {
-      // Add friend to current user's friends list using compat API
-      await db.collection('users').doc(currentUser.uid).update({
-        friends: [...(currentUser.friends || []), friendId]
-      });
+      // Check if friendship already exists
+      const { data: existing, error: checkError } = await supabase
+        .from('friendships')
+        .select('*')
+        .or(`and(user_id.eq.${currentUser.id},friend_id.eq.${friendId}),and(user_id.eq.${friendId},friend_id.eq.${currentUser.id})`);
+
+      if (checkError) {
+        console.error('Error checking existing friendship:', checkError);
+        Alert.alert('Error', 'Failed to send friend request');
+        return;
+      }
+
+      if (existing && existing.length > 0) {
+        const friendship = existing[0];
+        if (friendship.status === 'accepted') {
+          Alert.alert('Info', 'You are already friends with this user');
+        } else if (friendship.status === 'pending') {
+          Alert.alert('Info', 'Friend request already sent');
+        }
+        return;
+      }
+
+      // Create new friend request
+      const { error: insertError } = await supabase
+        .from('friendships')
+        .insert({
+          user_id: currentUser.id,
+          friend_id: friendId,
+          status: 'pending'
+        });
+
+      if (insertError) {
+        console.error('Error sending friend request:', insertError);
+        Alert.alert('Error', 'Failed to send friend request');
+        return;
+      }
       
-      // Add current user to friend's friends list
-      const friendDoc = await db.collection('users').doc(friendId).get();
-      const friendData = friendDoc.data();
-      await db.collection('users').doc(friendId).update({
-        friends: [...(friendData.friends || []), currentUser.uid]
-      });
-      
-      Alert.alert('🎉 Success!', 'Friend added successfully!');
-      loadFriends();
+      Alert.alert('🎉 Success!', 'Friend request sent!');
       setSearchText('');
       setSearchResults([]);
     } catch (error) {
-      Alert.alert('Error', 'Failed to add friend');
-      console.error('Add friend error:', error);
+      Alert.alert('Error', 'Failed to send friend request');
+      console.error('Send friend request error:', error);
+    }
+  };
+
+  const acceptFriendRequest = async (friendshipId) => {
+    try {
+      const { error } = await supabase
+        .from('friendships')
+        .update({ status: 'accepted' })
+        .eq('id', friendshipId);
+
+      if (error) {
+        console.error('Error accepting friend request:', error);
+        Alert.alert('Error', 'Failed to accept friend request');
+        return;
+      }
+      
+      Alert.alert('🎉 Success!', 'Friend request accepted!');
+      loadFriends();
+      loadPendingRequests();
+    } catch (error) {
+      Alert.alert('Error', 'Failed to accept friend request');
+      console.error('Accept friend request error:', error);
+    }
+  };
+
+  const rejectFriendRequest = async (friendshipId) => {
+    try {
+      const { error } = await supabase
+        .from('friendships')
+        .delete()
+        .eq('id', friendshipId);
+
+      if (error) {
+        console.error('Error rejecting friend request:', error);
+        Alert.alert('Error', 'Failed to reject friend request');
+        return;
+      }
+      
+      Alert.alert('Success', 'Friend request rejected');
+      loadPendingRequests();
+    } catch (error) {
+      Alert.alert('Error', 'Failed to reject friend request');
+      console.error('Reject friend request error:', error);
     }
   };
 
   const removeFriend = async (friendId) => {
     try {
-      // Remove friend from current user's friends list
-      const updatedFriends = currentUser.friends.filter(id => id !== friendId);
-      await db.collection('users').doc(currentUser.uid).update({
-        friends: updatedFriends
-      });
-      
-      // Remove current user from friend's friends list
-      const friendDoc = await db.collection('users').doc(friendId).get();
-      const friendData = friendDoc.data();
-      const updatedFriendFriends = friendData.friends.filter(id => id !== currentUser.uid);
-      await db.collection('users').doc(friendId).update({
-        friends: updatedFriendFriends
-      });
+      // Find and delete the friendship
+      const { error } = await supabase
+        .from('friendships')
+        .delete()
+        .or(`and(user_id.eq.${currentUser.id},friend_id.eq.${friendId}),and(user_id.eq.${friendId},friend_id.eq.${currentUser.id})`);
+
+      if (error) {
+        console.error('Error removing friend:', error);
+        Alert.alert('Error', 'Failed to remove friend');
+        return;
+      }
       
       Alert.alert('Success', 'Friend removed');
       loadFriends();
@@ -135,11 +244,19 @@ export default function FriendsScreen({ navigation }) {
     }
   };
 
-  const isFriend = (userId) => {
-    return currentUser?.friends?.includes(userId);
+  const getFriendshipStatus = (userId) => {
+    // Check if already friends
+    const isFriend = friends.some(friend => friend.id === userId);
+    if (isFriend) return 'friends';
+    
+    // Check if there's a pending request
+    const hasPendingRequest = pendingRequests.some(request => request.id === userId);
+    if (hasPendingRequest) return 'pending_incoming';
+    
+    return 'none';
   };
 
-  const renderSearchResult = ({ item }) => (
+  const renderPendingRequest = ({ item }) => (
     <View style={[{ backgroundColor: currentTheme.surface, borderRadius: 12, marginHorizontal: 16, marginBottom: 12, padding: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderWidth: 1, borderColor: currentTheme.border }]}>
       <View style={[{ flexDirection: 'row', alignItems: 'center', flex: 1 }]}>
         <View style={[{ backgroundColor: currentTheme.primary, borderRadius: 28, width: 56, height: 56, justifyContent: 'center', alignItems: 'center', marginRight: 16 }]}>
@@ -153,16 +270,62 @@ export default function FriendsScreen({ navigation }) {
         </View>
       </View>
       
-      <TouchableOpacity
-        style={[{ paddingHorizontal: 24, paddingVertical: 12, borderRadius: 24, backgroundColor: isFriend(item.id) ? '#ef4444' : currentTheme.primary }]}
-        onPress={() => isFriend(item.id) ? removeFriend(item.id) : addFriend(item.id)}
-      >
-        <Text style={[{ fontWeight: 'bold', color: isFriend(item.id) ? 'white' : currentTheme.background }]}>
-          {isFriend(item.id) ? '❌ Remove' : '➕ Add'}
-        </Text>
-      </TouchableOpacity>
+      <View style={[{ flexDirection: 'row', gap: 8 }]}>
+        <TouchableOpacity
+          style={[{ backgroundColor: currentTheme.primary, paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20 }]}
+          onPress={() => acceptFriendRequest(item.friendship_id)}
+        >
+          <Text style={[{ fontWeight: 'bold', color: currentTheme.background, fontSize: 12 }]}>✓ Accept</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[{ backgroundColor: '#ef4444', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20 }]}
+          onPress={() => rejectFriendRequest(item.friendship_id)}
+        >
+          <Text style={[{ fontWeight: 'bold', color: 'white', fontSize: 12 }]}>✗ Reject</Text>
+        </TouchableOpacity>
+      </View>
     </View>
   );
+
+  const renderSearchResult = ({ item }) => {
+    const status = getFriendshipStatus(item.id);
+    
+    return (
+      <View style={[{ backgroundColor: currentTheme.surface, borderRadius: 12, marginHorizontal: 16, marginBottom: 12, padding: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderWidth: 1, borderColor: currentTheme.border }]}>
+        <View style={[{ flexDirection: 'row', alignItems: 'center', flex: 1 }]}>
+          <View style={[{ backgroundColor: currentTheme.primary, borderRadius: 28, width: 56, height: 56, justifyContent: 'center', alignItems: 'center', marginRight: 16 }]}>
+            <Text style={[{ color: currentTheme.background, fontWeight: 'bold', fontSize: 20 }]}>
+              {item.username?.charAt(0).toUpperCase()}
+            </Text>
+          </View>
+          <View style={[{ flex: 1 }]}>
+            <Text style={[{ fontWeight: 'bold', fontSize: 20, color: currentTheme.primary }]}>{item.username}</Text>
+            <Text style={[{ color: currentTheme.textSecondary }]}>{item.email}</Text>
+          </View>
+        </View>
+        
+        {status === 'friends' ? (
+          <TouchableOpacity
+            style={[{ backgroundColor: '#ef4444', paddingHorizontal: 20, paddingVertical: 10, borderRadius: 24 }]}
+            onPress={() => removeFriend(item.id)}
+          >
+            <Text style={[{ fontWeight: 'bold', color: 'white' }]}>❌ Remove</Text>
+          </TouchableOpacity>
+        ) : status === 'pending_incoming' ? (
+          <View style={[{ backgroundColor: '#f59e0b', paddingHorizontal: 20, paddingVertical: 10, borderRadius: 24 }]}>
+            <Text style={[{ fontWeight: 'bold', color: 'white' }]}>⏳ Pending</Text>
+          </View>
+        ) : (
+          <TouchableOpacity
+            style={[{ backgroundColor: currentTheme.primary, paddingHorizontal: 20, paddingVertical: 10, borderRadius: 24 }]}
+            onPress={() => sendFriendRequest(item.id)}
+          >
+            <Text style={[{ fontWeight: 'bold', color: currentTheme.background }]}>➕ Add</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+    );
+  };
 
   const renderFriend = ({ item }) => (
     <View style={[{ backgroundColor: currentTheme.surface, borderRadius: 12, marginHorizontal: 16, marginBottom: 12, padding: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderWidth: 1, borderColor: currentTheme.border }]}>
@@ -179,7 +342,7 @@ export default function FriendsScreen({ navigation }) {
       </View>
       
       <TouchableOpacity
-        style={[{ backgroundColor: '#ef4444', paddingHorizontal: 24, paddingVertical: 12, borderRadius: 24 }]}
+        style={[{ backgroundColor: '#ef4444', paddingHorizontal: 20, paddingVertical: 10, borderRadius: 24 }]}
         onPress={() => removeFriend(item.id)}
       >
         <Text style={[{ color: 'white', fontWeight: 'bold' }]}>❌ Remove</Text>
@@ -187,14 +350,23 @@ export default function FriendsScreen({ navigation }) {
     </View>
   );
 
+  const onRefresh = () => {
+    setRefreshing(true);
+    Promise.all([loadFriends(), loadPendingRequests()]).finally(() => {
+      setRefreshing(false);
+    });
+  };
+
   return (
     <View style={[{ flex: 1, backgroundColor: currentTheme.background }]} {...panResponder.panHandlers}>
       {/* Header */}
       <View style={[{ backgroundColor: currentTheme.background, paddingTop: 56, paddingBottom: 24, paddingHorizontal: 24, borderBottomWidth: 1, borderBottomColor: currentTheme.border }]}>
         <View style={[{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }]}>
-          <View style={[{ width: 70 }]} />
           <TouchableOpacity onPress={() => navigation.goBack()}>
-            <Text style={[{ color: currentTheme.primary, fontSize: 18, fontWeight: '600' }]}>Back →</Text>
+            <Text style={[{ color: currentTheme.primary, fontSize: 18, fontWeight: '600' }]}>← Back</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={onRefresh}>
+            <Text style={[{ color: currentTheme.primary, fontSize: 18, fontWeight: '600' }]}>🔄 Refresh</Text>
           </TouchableOpacity>
         </View>
         <View style={[{ alignItems: 'center' }]}>
@@ -228,53 +400,76 @@ export default function FriendsScreen({ navigation }) {
         </View>
       </View>
 
-      {/* My Friends Section */}
-      <View style={[{ paddingHorizontal: 16, paddingTop: 24 }]}>
-        <Text style={[{ fontSize: 20, fontWeight: 'bold', color: currentTheme.primary, marginBottom: 16, textAlign: 'center' }]}>
-          My Friends ({friends.length})
-        </Text>
-        
-        {friends.length === 0 ? (
-          <View style={[{ alignItems: 'center', paddingVertical: 32 }]}>
-            <Text style={[{ fontSize: 32, marginBottom: 16 }]}>👤</Text>
-            <Text style={[{ fontSize: 18, color: currentTheme.textSecondary, textAlign: 'center' }]}>
-              No friends yet! Start by searching above. 🔍
-            </Text>
+      <FlatList
+        data={[]}
+        renderItem={() => null}
+        refreshing={refreshing}
+        onRefresh={onRefresh}
+        ListHeaderComponent={
+          <View>
+            {/* Pending Requests Section */}
+            {pendingRequests.length > 0 && (
+              <View style={[{ paddingHorizontal: 16, paddingTop: 24 }]}>
+                <Text style={[{ fontSize: 20, fontWeight: 'bold', color: currentTheme.primary, marginBottom: 16, textAlign: 'center' }]}>
+                  Friend Requests ({pendingRequests.length})
+                </Text>
+                {pendingRequests.map(request => (
+                  <View key={request.id}>
+                    {renderPendingRequest({ item: request })}
+                  </View>
+                ))}
+              </View>
+            )}
+
+            {/* My Friends Section */}
+            <View style={[{ paddingHorizontal: 16, paddingTop: 24 }]}>
+              <Text style={[{ fontSize: 20, fontWeight: 'bold', color: currentTheme.primary, marginBottom: 16, textAlign: 'center' }]}>
+                My Friends ({friends.length})
+              </Text>
+              
+              {friends.length === 0 ? (
+                <View style={[{ alignItems: 'center', paddingVertical: 32 }]}>
+                  <Text style={[{ fontSize: 32, marginBottom: 16 }]}>👤</Text>
+                  <Text style={[{ fontSize: 18, color: currentTheme.textSecondary, textAlign: 'center' }]}>
+                    No friends yet! Start by searching above. 🔍
+                  </Text>
+                </View>
+              ) : (
+                friends.map(friend => (
+                  <View key={friend.id}>
+                    {renderFriend({ item: friend })}
+                  </View>
+                ))
+              )}
+            </View>
+
+            {/* Search Results */}
+            {searchResults.length > 0 && (
+              <View style={[{ paddingHorizontal: 16, paddingTop: 24 }]}>
+                <Text style={[{ fontSize: 20, fontWeight: 'bold', color: currentTheme.primary, marginBottom: 16, textAlign: 'center' }]}>
+                  Search Results ({searchResults.length})
+                </Text>
+                {searchResults.map(result => (
+                  <View key={result.id}>
+                    {renderSearchResult({ item: result })}
+                  </View>
+                ))}
+              </View>
+            )}
+
+            {/* No Results Message */}
+            {searchText.length > 0 && searchResults.length === 0 && !loading && (
+              <View style={[{ justifyContent: 'center', alignItems: 'center', paddingHorizontal: 32, paddingVertical: 40 }]}>
+                <Text style={[{ fontSize: 32, marginBottom: 16 }]}>🔍</Text>
+                <Text style={[{ fontSize: 18, color: currentTheme.textSecondary, textAlign: 'center' }]}>
+                  No users found with that username. Try a different search! 
+                </Text>
+              </View>
+            )}
           </View>
-        ) : (
-          <FlatList
-            data={friends}
-            renderItem={renderFriend}
-            keyExtractor={(item) => item.id}
-            showsVerticalScrollIndicator={false}
-            style={{ maxHeight: 200 }}
-          />
-        )}
-      </View>
-
-      {/* Search Results */}
-      {searchResults.length > 0 && (
-        <View style={[{ flex: 1, paddingHorizontal: 16, paddingTop: 16 }]}>
-          <Text style={[{ fontSize: 20, fontWeight: 'bold', color: currentTheme.primary, marginBottom: 16, textAlign: 'center' }]}>
-            Search Results
-          </Text>
-          <FlatList
-            data={searchResults}
-            renderItem={renderSearchResult}
-            keyExtractor={(item) => item.id}
-            showsVerticalScrollIndicator={false}
-          />
-        </View>
-      )}
-
-      {searchText.length > 0 && searchResults.length === 0 && !loading && (
-        <View style={[{ flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 32 }]}>
-          <Text style={[{ fontSize: 32, marginBottom: 16 }]}>🔍</Text>
-          <Text style={[{ fontSize: 18, color: currentTheme.textSecondary, textAlign: 'center' }]}>
-            No users found with that username. Try a different search! 
-          </Text>
-        </View>
-      )}
+        }
+        showsVerticalScrollIndicator={false}
+      />
     </View>
   );
 }

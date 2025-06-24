@@ -2,7 +2,7 @@ import React from 'react';
 import { View, Text } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator, CardStyleInterpolators } from '@react-navigation/stack';
-import { AuthProvider, useAuth } from './src/context/AuthContext';
+import { AuthProvider, useAuth } from './src/context/SupabaseAuthContext';
 import { ThemeProvider } from './src/context/ThemeContext';
 
 // Import screens
@@ -13,6 +13,9 @@ import CameraScreen from './src/screens/CameraScreen';
 import StoriesScreen from './src/screens/StoriesScreen';
 import FriendsScreen from './src/screens/FriendsScreen';
 import ProfileScreen from './src/screens/ProfileScreen';
+
+// Import debug components
+import DebugAccountSwitcher from './src/components/DebugAccountSwitcher';
 
 const Stack = createStackNavigator();
 
@@ -44,7 +47,44 @@ function AppNavigator() {
               name="Stories" 
               component={StoriesScreen}
               options={{
-                cardStyleInterpolator: CardStyleInterpolators.forHorizontalIOS,
+                cardStyleInterpolator: ({ current, next, layouts }) => {
+                  return {
+                    cardStyle: {
+                      transform: [
+                        {
+                          translateX: current.progress.interpolate({
+                            inputRange: [0, 1],
+                            outputRange: [layouts.screen.width, 0],
+                          }),
+                        },
+                        {
+                          translateX: next
+                            ? next.progress.interpolate({
+                                inputRange: [0, 1],
+                                outputRange: [0, -layouts.screen.width],
+                              })
+                            : 0,
+                        },
+                      ],
+                    },
+                  };
+                },
+                gestureEnabled: true,
+                gestureDirection: 'horizontal',
+                transitionSpec: {
+                  open: {
+                    animation: 'timing',
+                    config: {
+                      duration: 250,
+                    },
+                  },
+                  close: {
+                    animation: 'timing',
+                    config: {
+                      duration: 250,
+                    },
+                  },
+                },
               }}
             />
             <Stack.Screen 
@@ -65,6 +105,9 @@ function AppNavigator() {
           </>
         )}
       </Stack.Navigator>
+      
+      {/* Debug Account Switcher - only visible in development */}
+      <DebugAccountSwitcher />
     </NavigationContainer>
   );
 }

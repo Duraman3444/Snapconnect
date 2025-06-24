@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, Image, TouchableOpacity, Alert, Dimensions, FlatList, PanResponder } from 'react-native';
-import { db } from '../../firebaseConfig';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../context/SupabaseAuthContext';
 import { useTheme } from '../context/ThemeContext';
 
 const { width, height } = Dimensions.get('window');
@@ -11,7 +10,7 @@ export default function StoriesScreen({ navigation, route }) {
   const [stories, setStories] = useState([]);
   const [loading, setLoading] = useState(true);
   const { snap } = route?.params || {};
-  const { currentUser } = useAuth();
+  const { currentUser, supabase } = useAuth();
   const { currentTheme } = useTheme();
 
   // Swipe gesture for navigation
@@ -23,7 +22,7 @@ export default function StoriesScreen({ navigation, route }) {
     onPanResponderRelease: (_, gestureState) => {
       const { dx } = gestureState;
       if (dx < -100) { // Swipe left to go back to camera
-        navigation.navigate('Camera');
+        navigation.goBack();
       }
     },
   });
@@ -52,30 +51,60 @@ export default function StoriesScreen({ navigation, route }) {
     if (!currentUser) return;
 
     try {
-      const unsubscribe = db.collection('snaps')
-        .where('userId', '!=', currentUser.uid)
-        .orderBy('createdAt', 'desc')
-        .onSnapshot((querySnapshot) => {
-          const storiesData = [];
-          querySnapshot.forEach((doc) => {
-            const story = { id: doc.id, ...doc.data() };
-            // Only show stories that haven't expired
-            const expirationDate = story.expiresAt?.toDate ? story.expiresAt.toDate() : new Date(story.expiresAt);
-            if (expirationDate > new Date()) {
-              storiesData.push(story);
-            }
-          });
-          setStories(storiesData);
-          setLoading(false);
-        }, (error) => {
-          console.error('Error fetching stories:', error);
-          setLoading(false);
-        });
+      // Get stories that haven't expired (within 24 hours) from friends and own stories
+      const { data: storiesData, error } = await supabase
+        .from('stories')
+        .select('*')
+        .gt('expires_at', new Date().toISOString())
+        .order('created_at', { ascending: false });
 
-      return unsubscribe;
+      if (error) {
+        console.error('Error loading stories:', error);
+        setLoading(false);
+        return;
+      }
+
+      // Filter stories to only show from friends and self
+      // For now, show all stories - you could add friend filtering here later
+      setStories(storiesData || []);
+      setLoading(false);
     } catch (error) {
       console.error('Load stories error:', error);
       setLoading(false);
+    }
+  };
+
+  const addStoryViewer = async (storyId) => {
+    if (!currentUser || !storyId) return;
+
+    try {
+      // Get current story to update viewers
+      const { data: story, error: fetchError } = await supabase
+        .from('stories')
+        .select('viewers')
+        .eq('id', storyId)
+        .single();
+
+      if (fetchError) {
+        console.error('Error fetching story:', fetchError);
+        return;
+      }
+
+      const currentViewers = story.viewers || [];
+      if (!currentViewers.includes(currentUser.id)) {
+        const updatedViewers = [...currentViewers, currentUser.id];
+        
+        const { error: updateError } = await supabase
+          .from('stories')
+          .update({ viewers: updatedViewers })
+          .eq('id', storyId);
+
+        if (updateError) {
+          console.error('Error updating story viewers:', updateError);
+        }
+      }
+    } catch (error) {
+      console.error('Error adding story viewer:', error);
     }
   };
 
@@ -84,13 +113,20 @@ export default function StoriesScreen({ navigation, route }) {
   };
 
   const viewStory = (story) => {
+    // Add current user as viewer
+    addStoryViewer(story.id);
     navigation.push('Stories', { snap: story });
   };
 
-  // If viewing a specific snap
+  // If viewing a specific snap or story
   if (snap) {
+    const isStory = snap.type === 'story';
+    const imageUrl = snap.image_url || snap.imageUrl;
+    const username = snap.username || snap.sender_username;
+    const createdAt = snap.created_at || snap.createdAt;
+    
     return (
-      <View className="flex-1 bg-black">
+      <View style={[{ flex: 1, backgroundColor: 'black' }]}>
         {/* Progress bar */}
         <View style={[{ position: 'absolute', top: 48, left: 16, right: 16, zIndex: 10 }]}>
           <View style={[{ backgroundColor: '#6b7280', height: 4, borderRadius: 2 }]}>
@@ -105,13 +141,13 @@ export default function StoriesScreen({ navigation, route }) {
           <View style={[{ flexDirection: 'row', alignItems: 'center' }]}>
             <View style={[{ backgroundColor: currentTheme.primary, borderRadius: 24, width: 48, height: 48, justifyContent: 'center', alignItems: 'center', marginRight: 12 }]}>
               <Text style={[{ color: currentTheme.background, fontWeight: 'bold', fontSize: 18 }]}>
-                {snap.username?.charAt(0).toUpperCase()}
+                {username?.charAt(0).toUpperCase()}
               </Text>
             </View>
             <View>
-              <Text style={[{ color: 'white', fontWeight: 'bold', fontSize: 18 }]}>{snap.username}</Text>
+              <Text style={[{ color: 'white', fontWeight: 'bold', fontSize: 18 }]}>{username}</Text>
               <Text style={[{ color: '#d1d5db', fontSize: 14 }]}>
-                {snap.createdAt?.toDate ? snap.createdAt.toDate().toLocaleTimeString() : 'Just now'}
+                {createdAt ? new Date(createdAt).toLocaleTimeString() : 'Just now'}
               </Text>
             </View>
           </View>
@@ -124,14 +160,14 @@ export default function StoriesScreen({ navigation, route }) {
           </TouchableOpacity>
         </View>
 
-        {/* Snap image */}
+        {/* Snap/Story image */}
         <TouchableOpacity 
           style={[{ flex: 1 }]}
           onPress={closeStory}
           activeOpacity={1}
         >
           <Image 
-            source={{ uri: snap.imageUrl || 'https://via.placeholder.com/300x400.png?text=No+Image' }} 
+            source={{ uri: imageUrl || 'https://via.placeholder.com/300x400.png?text=No+Image' }} 
             style={{ width, height }}
             resizeMode="cover"
           />
@@ -162,16 +198,30 @@ export default function StoriesScreen({ navigation, route }) {
         <View style={[{ flex: 1 }]}>
           <Text style={[{ fontWeight: 'bold', fontSize: 20, color: currentTheme.primary }]}>{item.username}</Text>
           <Text style={[{ color: currentTheme.textSecondary }]}>
-            {item.createdAt?.toDate ? item.createdAt.toDate().toLocaleTimeString() : 'Just now'}
+            {new Date(item.created_at).toLocaleTimeString()}
+          </Text>
+          <Text style={[{ color: currentTheme.textSecondary, fontSize: 12, marginTop: 2 }]}>
+            {(item.viewers || []).length} views
           </Text>
         </View>
       </View>
       <View style={[{ backgroundColor: currentTheme.border, borderRadius: 12, height: 192, justifyContent: 'center', alignItems: 'center' }]}>
-        <Text style={[{ color: currentTheme.primary, fontSize: 24, marginBottom: 8 }]}>📖</Text>
-        <Text style={[{ color: currentTheme.primary, fontSize: 18, fontWeight: '600' }]}>Tap to view story</Text>
+        <Image 
+          source={{ uri: item.image_url || 'https://via.placeholder.com/300x200.png?text=Story' }} 
+          style={[{ width: '100%', height: '100%', borderRadius: 12 }]}
+          resizeMode="cover"
+        />
+        <View style={[{ position: 'absolute', bottom: 8, right: 8, backgroundColor: 'rgba(0, 0, 0, 0.6)', borderRadius: 12, paddingHorizontal: 8, paddingVertical: 4 }]}>
+          <Text style={[{ color: 'white', fontSize: 12, fontWeight: 'bold' }]}>📖 Tap to view</Text>
+        </View>
       </View>
     </TouchableOpacity>
   );
+
+  const onRefresh = () => {
+    setLoading(true);
+    loadStories();
+  };
 
   return (
     <View style={[{ flex: 1, backgroundColor: currentTheme.background }]} {...panResponder.panHandlers}>
@@ -180,6 +230,9 @@ export default function StoriesScreen({ navigation, route }) {
         <View style={[{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }]}>
           <TouchableOpacity onPress={() => navigation.goBack()}>
             <Text style={[{ color: currentTheme.primary, fontSize: 18, fontWeight: '600' }]}>← Back</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={onRefresh}>
+            <Text style={[{ color: currentTheme.primary, fontSize: 18, fontWeight: '600' }]}>🔄 Refresh</Text>
           </TouchableOpacity>
         </View>
         <View style={[{ alignItems: 'center' }]}>
@@ -207,13 +260,13 @@ export default function StoriesScreen({ navigation, route }) {
             Stories from friends will appear here when they share their moments. Start sharing to inspire others! 🌟
           </Text>
           <TouchableOpacity
-            style={[{ backgroundColor: currentTheme.primary, borderRadius: 24, paddingHorizontal: 32, paddingVertical: 16 }]}
+            style={[{ backgroundColor: currentTheme.primary, borderRadius: 24, paddingHorizontal: 32, paddingVertical: 16, marginBottom: 16 }]}
             onPress={() => navigation.navigate('Camera')}
           >
             <Text style={[{ color: currentTheme.background, fontWeight: 'bold', fontSize: 18 }]}>📷 Create a Story</Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={[{ backgroundColor: currentTheme.surface, borderRadius: 24, paddingHorizontal: 32, paddingVertical: 16, marginTop: 16 }]}
+            style={[{ backgroundColor: currentTheme.surface, borderRadius: 24, paddingHorizontal: 32, paddingVertical: 16, borderWidth: 1, borderColor: currentTheme.border }]}
             onPress={() => navigation.navigate('Friends')}
           >
             <Text style={[{ color: currentTheme.primary, fontWeight: '600', fontSize: 18 }]}>👥 Find Friends</Text>
@@ -226,6 +279,8 @@ export default function StoriesScreen({ navigation, route }) {
           keyExtractor={(item) => item.id}
           contentContainerStyle={{ paddingTop: 20, paddingBottom: 100 }}
           showsVerticalScrollIndicator={false}
+          onRefresh={onRefresh}
+          refreshing={loading}
         />
       )}
     </View>
