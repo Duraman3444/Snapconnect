@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import { useAuth } from '../context/SupabaseAuthContext';
 import { useTheme } from '../context/ThemeContext';
+import ImageWithFallback from '../components/ImageWithFallback';
 
 const { width: screenWidth } = Dimensions.get('window');
 
@@ -448,13 +449,8 @@ export default function ChatScreen({ navigation, route }) {
             {/* Image Message */}
             {isImageMessage && item.image_url ? (
               <View>
-                <Image 
-                  source={{ 
-                    uri: item.image_url,
-                    headers: {
-                      'Cache-Control': 'no-cache',
-                    },
-                  }}
+                <ImageWithFallback
+                  source={{ uri: item.image_url }}
                   style={[{
                     width: screenWidth * 0.6,
                     height: screenWidth * 0.8,
@@ -462,35 +458,9 @@ export default function ChatScreen({ navigation, route }) {
                     backgroundColor: currentTheme.surface
                   }]}
                   resizeMode="cover"
-                  onError={(error) => {
-                    console.error('Chat image loading error:', error.nativeEvent?.error || error);
-                    console.error('Failed URL:', item.image_url);
-                  }}
-                  onLoad={() => {
-                    console.log('Chat image loaded successfully:', item.image_url);
-                  }}
-                  onLoadStart={() => {
-                    console.log('Started loading chat image:', item.image_url);
-                  }}
-                  // Add these additional props for better compatibility
-                  fadeDuration={0}
-                  loadingIndicatorSource={{ uri: 'https://via.placeholder.com/300x400.png?text=Loading...' }}
+                  fallbackText="📸"
+                  fallbackSubtext="Image couldn't load"
                 />
-                
-                {/* Fallback overlay if image fails */}
-                <View style={[{
-                  position: 'absolute',
-                  top: 0,
-                  left: 0,
-                  right: 0,
-                  bottom: 0,
-                  backgroundColor: 'rgba(0, 0, 0, 0.1)',
-                  justifyContent: 'center',
-                  alignItems: 'center',
-                  borderRadius: 16
-                }]}>
-                  {/* This will be transparent if image loads, visible if it fails */}
-                </View>
                 
                 {/* Image message overlay */}
                 <View style={[{

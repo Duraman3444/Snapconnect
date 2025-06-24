@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, Image, TouchableOpacity, Alert, Dimensions, FlatList, PanResponder } from 'react-native';
 import { useAuth } from '../context/SupabaseAuthContext';
 import { useTheme } from '../context/ThemeContext';
+import ImageWithFallback from '../components/ImageWithFallback';
 
 const { width, height } = Dimensions.get('window');
 
@@ -161,68 +162,14 @@ export default function StoriesScreen({ navigation, route }) {
         </View>
 
         {/* Snap/Story image */}
-        <TouchableOpacity 
-          style={[{ flex: 1 }]}
+        <ImageWithFallback
+          source={{ uri: imageUrl }}
+          style={{ width, height }}
+          resizeMode="cover"
+          fallbackText="📸"
+          fallbackSubtext="Story couldn't load"
           onPress={closeStory}
-          activeOpacity={1}
-        >
-          <Image 
-            source={{ 
-              uri: imageUrl || 'https://via.placeholder.com/300x400.png?text=No+Image',
-              headers: {
-                'Cache-Control': 'no-cache',
-              },
-            }} 
-            style={{ width, height }}
-            resizeMode="cover"
-            onError={(error) => {
-              console.error('Story image loading error:', error.nativeEvent?.error || error);
-              console.error('Failed URL:', imageUrl);
-            }}
-            onLoad={() => {
-              console.log('Story image loaded successfully:', imageUrl);
-            }}
-            onLoadStart={() => {
-              console.log('Started loading story image:', imageUrl);
-            }}
-            onLoadEnd={() => {
-              console.log('Finished loading story image (success or failure):', imageUrl);
-            }}
-            fadeDuration={0}
-            loadingIndicatorSource={{ uri: 'https://via.placeholder.com/300x400.png?text=Loading...' }}
-          />
-          {/* Enhanced fallback for when image fails to load */}
-          {(imageUrl === 'https://via.placeholder.com/300x400.png?text=No+Image') && (
-            <View style={{
-              position: 'absolute',
-              top: 0,
-              left: 0,
-              right: 0,
-              bottom: 0,
-              backgroundColor: currentTheme.surface,
-              justifyContent: 'center',
-              alignItems: 'center'
-            }}>
-              <Text style={{ color: currentTheme.text, fontSize: 48, marginBottom: 16 }}>📸</Text>
-              <Text style={{ color: currentTheme.text, fontSize: 18, fontWeight: 'bold' }}>Image not available</Text>
-              <Text style={{ color: currentTheme.textSecondary, marginTop: 8, textAlign: 'center', paddingHorizontal: 32 }}>
-                This image couldn't be loaded. It may have been removed or there's a connection issue.
-              </Text>
-              <TouchableOpacity
-                onPress={closeStory}
-                style={[{
-                  backgroundColor: currentTheme.primary,
-                  borderRadius: 20,
-                  paddingHorizontal: 24,
-                  paddingVertical: 12,
-                  marginTop: 16
-                }]}
-              >
-                <Text style={[{ color: currentTheme.background, fontWeight: 'bold' }]}>← Go Back</Text>
-              </TouchableOpacity>
-            </View>
-          )}
-        </TouchableOpacity>
+        />
 
         {/* Timer display */}
         <View style={[{ position: 'absolute', bottom: 32, right: 16 }]}>
@@ -257,20 +204,12 @@ export default function StoriesScreen({ navigation, route }) {
         </View>
       </View>
       <View style={[{ backgroundColor: currentTheme.border, borderRadius: 12, height: 192, justifyContent: 'center', alignItems: 'center' }]}>
-        <Image 
-          source={{ 
-            uri: item.image_url || 'https://via.placeholder.com/300x200.png?text=Story',
-            cache: 'force-cache'
-          }} 
+        <ImageWithFallback
+          source={{ uri: item.image_url }}
           style={[{ width: '100%', height: '100%', borderRadius: 12 }]}
           resizeMode="cover"
-          onError={(error) => {
-            console.error('Story list image loading error:', error.nativeEvent?.error || error);
-          }}
-          onLoad={() => {
-            console.log('Story list image loaded:', item.image_url);
-          }}
-          defaultSource={{ uri: 'https://via.placeholder.com/300x200.png?text=Loading...' }}
+          fallbackText="📖"
+          fallbackSubtext="Story preview"
         />
         <View style={[{ position: 'absolute', bottom: 8, right: 8, backgroundColor: 'rgba(0, 0, 0, 0.6)', borderRadius: 12, paddingHorizontal: 8, paddingVertical: 4 }]}>
           <Text style={[{ color: 'white', fontSize: 12, fontWeight: 'bold' }]}>📖 Tap to view</Text>
