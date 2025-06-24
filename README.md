@@ -243,9 +243,6 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 For support, questions, or feedback:
 - Open an issue on GitHub
-- Contact: [your-email@example.com]
-- Documentation: [Link to detailed docs]
-
 ---
 
 **Made with ❤️ for connecting people through moments**
