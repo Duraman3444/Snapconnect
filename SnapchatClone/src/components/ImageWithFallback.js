@@ -20,7 +20,7 @@ const ImageWithFallback = ({
     
     // Run detailed debugging
     if (source?.uri) {
-      console.log('🔧 Running URL diagnostics...');
+      console.log('Running URL diagnostics...');
       await testSupabaseImageUrl(source.uri);
     }
     
