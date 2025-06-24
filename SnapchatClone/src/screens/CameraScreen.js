@@ -142,6 +142,18 @@ export default function CameraScreen({ navigation }) {
       const publicUrl = urlData.publicUrl;
       console.log('Generated photo message URL:', publicUrl);
 
+      // ✅ FALLBACK: If public URL might not work, also generate a signed URL
+      const { data: signedUrlData, error: signedUrlError } = await supabase.storage
+        .from('media')
+        .createSignedUrl(fileName, 60 * 60 * 24 * 7); // 7 days
+
+      let finalImageUrl = publicUrl;
+      if (signedUrlData && !signedUrlError) {
+        console.log('Generated signed URL as fallback:', signedUrlData.signedUrl);
+        // For now, let's try the signed URL since public URLs are failing
+        finalImageUrl = signedUrlData.signedUrl;
+      }
+
       // ✅ STEP 3: Get or create conversation
       const { data: conversationId, error: convError } = await supabase
         .rpc('get_or_create_conversation', {
@@ -169,7 +181,7 @@ export default function CameraScreen({ navigation }) {
           receiver_id: friend.id,
           content: '📸 Photo',
           message_type: 'image',
-          image_url: publicUrl, // ← NOW USING UPLOADED URL!
+          image_url: finalImageUrl, // ← NOW USING UPLOADED URL!
           is_ephemeral: true
         });
 
@@ -217,12 +229,24 @@ export default function CameraScreen({ navigation }) {
 
       const publicUrl = urlData.publicUrl;
       console.log('Generated story URL:', publicUrl);
+
+      // ✅ FALLBACK: Generate signed URL for stories too
+      const { data: signedUrlData, error: signedUrlError } = await supabase.storage
+        .from('media')
+        .createSignedUrl(fileName, 60 * 60 * 24 * 7); // 7 days
+
+      let finalStoryUrl = publicUrl;
+      if (signedUrlData && !signedUrlError) {
+        console.log('Generated signed story URL as fallback:', signedUrlData.signedUrl);
+        // Use signed URL since public URLs are failing
+        finalStoryUrl = signedUrlData.signedUrl;
+      }
       
       // Save story data to Supabase
       const { error: insertError } = await supabase.from('stories').insert({
         user_id: currentUser.id,
         username: currentUser.username || 'Anonymous',
-        image_url: publicUrl,
+        image_url: finalStoryUrl,
         type: 'story',
         created_at: new Date().toISOString(),
         expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(), // 24 hours from now
