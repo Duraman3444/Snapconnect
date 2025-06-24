@@ -308,6 +308,11 @@ export default function CameraScreen({ navigation }) {
       
       {/* Top Header */}
       <View style={styles.topHeader}>
+        <TouchableOpacity onPress={() => navigation.navigate('ChatsList')}>
+          <View style={[{ borderRadius: 20, padding: 8 }, { backgroundColor: currentTheme.primary }]}>
+            <Text style={[{ fontWeight: 'bold', fontSize: 18 }, { color: currentTheme.background }]}>💬</Text>
+          </View>
+        </TouchableOpacity>
         <Text style={[{ fontSize: 24, fontWeight: 'bold' }, { color: currentTheme.primary }]}>👻 SnapConnect</Text>
         <TouchableOpacity onPress={() => navigation.navigate('Profile')}>
           <View style={[{ borderRadius: 20, padding: 8 }, { backgroundColor: currentTheme.primary }]}>

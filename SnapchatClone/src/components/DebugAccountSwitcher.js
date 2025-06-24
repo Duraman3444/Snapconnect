@@ -33,7 +33,7 @@ const TEST_ACCOUNTS = [
 export default function DebugAccountSwitcher() {
   const [isVisible, setIsVisible] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const { currentUser, login, logout, signup } = useAuth();
+  const { currentUser, login, logout, signup, supabase } = useAuth();
   const { currentTheme } = useTheme();
 
   const switchToAccount = async (account) => {
@@ -50,21 +50,31 @@ export default function DebugAccountSwitcher() {
         await login(account.email, account.password);
         Alert.alert('✅ Success', `Switched to ${account.name}!`);
       } catch (loginError) {
-        // If login fails, the account might not exist - try to create it
         console.log('Login failed, trying to create account...', loginError.message);
+        
+        // Handle different login error types
+        if (loginError.message.includes('Email not confirmed')) {
+          Alert.alert('📧 Email Not Confirmed', 
+            `Account ${account.name} exists but email needs confirmation.\n\nTo fix this:\n1. Go to Supabase Dashboard\n2. Run the SUPABASE_FIX.sql script\n3. Or manually confirm emails in Auth users table`);
+          setIsVisible(false);
+          setIsLoading(false);
+          return;
+        }
         
         try {
           await signup(account.email, account.password, account.username);
-          Alert.alert('✅ Account Created', `Created and switched to ${account.name}!`);
+          Alert.alert('✅ Account Created', `Created and switched to ${account.name}!\n\nNote: If login fails, the email may need confirmation.`);
         } catch (signupError) {
           console.error('Signup error:', signupError);
           
-          // Check if it's a duplicate user error
+          // Handle different signup error types
           if (signupError.message.includes('already been registered') || 
               signupError.message.includes('User already registered')) {
-            // Account exists, but password might be wrong - try a few times
             Alert.alert('⚠️ Account Exists', 
-              `Account ${account.name} exists but password might be different. Check Supabase Auth users.`);
+              `Account ${account.name} exists but password might be different or email needs confirmation.\n\nTry:\n1. Running SUPABASE_FIX.sql in Supabase\n2. Checking Auth users in Supabase dashboard`);
+          } else if (signupError.message.includes('For security purposes')) {
+            Alert.alert('⏳ Rate Limited', 
+              `Supabase rate limiting detected. Please wait a minute and try again.\n\nTip: Create accounts one at a time to avoid rate limits.`);
           } else {
             Alert.alert('❌ Error', `Failed to create ${account.name}: ${signupError.message}`);
           }
@@ -85,7 +95,7 @@ export default function DebugAccountSwitcher() {
       setIsLoading(true);
       Alert.alert(
         '🔧 Create Test Accounts',
-        'This will create all test accounts with valid email formats. Continue?',
+        'This will create test accounts one by one to avoid rate limits. Continue?',
         [
           { text: 'Cancel', style: 'cancel' },
           {
@@ -93,9 +103,15 @@ export default function DebugAccountSwitcher() {
             onPress: async () => {
               let successCount = 0;
               let existingCount = 0;
+              let errorCount = 0;
               
               for (const account of TEST_ACCOUNTS) {
                 try {
+                  // Add delay to avoid rate limiting
+                  if (successCount > 0) {
+                    await new Promise(resolve => setTimeout(resolve, 2000)); // 2 second delay
+                  }
+                  
                   await signup(account.email, account.password, account.username);
                   console.log(`✅ Created account: ${account.name}`);
                   successCount++;
@@ -104,14 +120,24 @@ export default function DebugAccountSwitcher() {
                       error.message.includes('User already registered')) {
                     console.log(`⚠️ Account ${account.name} already exists`);
                     existingCount++;
+                  } else if (error.message.includes('For security purposes')) {
+                    console.log(`⏳ Rate limited on account ${account.name}`);
+                    errorCount++;
+                    break; // Stop trying if rate limited
                   } else {
                     console.error(`❌ Failed to create ${account.name}:`, error.message);
+                    errorCount++;
                   }
                 }
               }
               
-              Alert.alert('✅ Complete', 
-                `Created: ${successCount} accounts\nExisting: ${existingCount} accounts\nReady for testing!`);
+              let message = `Results:\n• Created: ${successCount} accounts\n• Existing: ${existingCount} accounts`;
+              if (errorCount > 0) {
+                message += `\n• Errors: ${errorCount} accounts`;
+                message += `\n\n⚠️ Some accounts may need email confirmation. Run SUPABASE_FIX.sql in your Supabase dashboard.`;
+              }
+              
+              Alert.alert('✅ Complete', message);
               setIsVisible(false);
             }
           }
@@ -124,33 +150,43 @@ export default function DebugAccountSwitcher() {
     }
   };
 
-  const resetAllPasswords = async () => {
+  const fixSupabaseIssues = async () => {
     try {
       setIsLoading(true);
       Alert.alert(
-        '🔄 Reset Passwords',
-        'This will send password reset emails to all test accounts. Continue?',
+        '🔧 Fix Supabase Issues',
+        'This will attempt to fix common Supabase issues like missing profiles and email confirmation.',
         [
           { text: 'Cancel', style: 'cancel' },
           {
-            text: 'Reset All',
+            text: 'Run Fixes',
             onPress: async () => {
-              for (const account of TEST_ACCOUNTS) {
-                try {
-                  // Note: This would require Supabase password reset functionality
-                  console.log(`Attempting to reset password for ${account.email}`);
-                } catch (error) {
-                  console.error(`Failed to reset password for ${account.name}:`, error.message);
+              try {
+                // Try to create missing profiles
+                const { error: profilesError } = await supabase.rpc('create_missing_profiles');
+                if (profilesError) {
+                  console.error('Error creating missing profiles:', profilesError);
                 }
+                
+                // Try to confirm test emails
+                const { error: confirmError } = await supabase.rpc('confirm_test_emails');
+                if (confirmError) {
+                  console.error('Error confirming emails:', confirmError);
+                }
+                
+                Alert.alert('✅ Fixes Applied', 
+                  'Attempted to fix:\n• Missing profiles\n• Email confirmations\n\nNote: Some fixes may require running SUPABASE_FIX.sql manually in Supabase dashboard.');
+              } catch (error) {
+                Alert.alert('⚠️ Partial Fix', 
+                  `Some fixes applied, but manual steps needed:\n\n1. Go to Supabase Dashboard\n2. SQL Editor\n3. Run SUPABASE_FIX.sql script\n\nError: ${error.message}`);
               }
-              Alert.alert('📧 Reset Emails Sent', 'Check your email for password reset links!');
               setIsVisible(false);
             }
           }
         ]
       );
     } catch (error) {
-      Alert.alert('❌ Error', `Failed to reset passwords: ${error.message}`);
+      Alert.alert('❌ Error', `Failed to run fixes: ${error.message}`);
     } finally {
       setIsLoading(false);
     }
@@ -206,7 +242,7 @@ export default function DebugAccountSwitcher() {
             padding: 24,
             width: '90%',
             maxWidth: 400,
-            maxHeight: '80%',
+            maxHeight: '85%',
             shadowColor: '#000',
             shadowOffset: { width: 0, height: 4 },
             shadowOpacity: 0.25,
@@ -214,7 +250,7 @@ export default function DebugAccountSwitcher() {
             elevation: 10
           }]}>
             {/* Header */}
-            <View style={[{ alignItems: 'center', marginBottom: 24 }]}>
+            <View style={[{ alignItems: 'center', marginBottom: 20 }]}>
               <Text style={[{ fontSize: 24, fontWeight: 'bold', color: currentTheme.primary, marginBottom: 8 }]}>
                 🔧 Debug Account Switcher
               </Text>
@@ -229,9 +265,9 @@ export default function DebugAccountSwitcher() {
             </View>
 
             {/* Test Accounts */}
-            <View style={[{ marginBottom: 24 }]}>
-              <Text style={[{ fontSize: 18, fontWeight: 'bold', color: currentTheme.primary, marginBottom: 16 }]}>
-                Test Accounts (Updated emails):
+            <View style={[{ marginBottom: 20 }]}>
+              <Text style={[{ fontSize: 18, fontWeight: 'bold', color: currentTheme.primary, marginBottom: 12 }]}>
+                Test Accounts:
               </Text>
               {TEST_ACCOUNTS.map((account) => (
                 <TouchableOpacity
@@ -239,8 +275,8 @@ export default function DebugAccountSwitcher() {
                   style={[{
                     backgroundColor: currentTheme.surface,
                     borderRadius: 12,
-                    padding: 16,
-                    marginBottom: 12,
+                    padding: 12,
+                    marginBottom: 8,
                     flexDirection: 'row',
                     alignItems: 'center',
                     borderWidth: 1,
@@ -249,21 +285,18 @@ export default function DebugAccountSwitcher() {
                   onPress={() => switchToAccount(account)}
                   disabled={isLoading}
                 >
-                  <Text style={[{ fontSize: 32, marginRight: 16 }]}>{account.emoji}</Text>
+                  <Text style={[{ fontSize: 28, marginRight: 12 }]}>{account.emoji}</Text>
                   <View style={[{ flex: 1 }]}>
-                    <Text style={[{ fontSize: 18, fontWeight: 'bold', color: currentTheme.primary }]}>
+                    <Text style={[{ fontSize: 16, fontWeight: 'bold', color: currentTheme.primary }]}>
                       {account.name}
                     </Text>
-                    <Text style={[{ color: currentTheme.textSecondary, fontSize: 14 }]}>
-                      @{account.username}
-                    </Text>
                     <Text style={[{ color: currentTheme.textSecondary, fontSize: 12 }]}>
-                      {account.email}
+                      @{account.username}
                     </Text>
                   </View>
                   {currentUser?.username === account.username && (
-                    <View style={[{ backgroundColor: currentTheme.primary, borderRadius: 12, paddingHorizontal: 8, paddingVertical: 4 }]}>
-                      <Text style={[{ color: currentTheme.background, fontSize: 12, fontWeight: 'bold' }]}>ACTIVE</Text>
+                    <View style={[{ backgroundColor: currentTheme.primary, borderRadius: 8, paddingHorizontal: 6, paddingVertical: 2 }]}>
+                      <Text style={[{ color: currentTheme.background, fontSize: 10, fontWeight: 'bold' }]}>ACTIVE</Text>
                     </View>
                   )}
                 </TouchableOpacity>
@@ -271,20 +304,36 @@ export default function DebugAccountSwitcher() {
             </View>
 
             {/* Actions */}
-            <View style={[{ flexDirection: 'row', justifyContent: 'space-between', gap: 8, marginBottom: 16 }]}>
+            <View style={[{ flexDirection: 'row', justifyContent: 'space-between', gap: 6, marginBottom: 16 }]}>
               <TouchableOpacity
                 style={[{
                   backgroundColor: currentTheme.primary,
                   borderRadius: 12,
-                  paddingHorizontal: 16,
-                  paddingVertical: 12,
+                  paddingHorizontal: 12,
+                  paddingVertical: 10,
                   flex: 1
                 }]}
                 onPress={createAllTestAccounts}
                 disabled={isLoading}
               >
-                <Text style={[{ color: currentTheme.background, fontWeight: 'bold', textAlign: 'center', fontSize: 14 }]}>
+                <Text style={[{ color: currentTheme.background, fontWeight: 'bold', textAlign: 'center', fontSize: 12 }]}>
                   {isLoading ? '⏳' : '🔧 Create All'}
+                </Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity
+                style={[{
+                  backgroundColor: '#f59e0b',
+                  borderRadius: 12,
+                  paddingHorizontal: 12,
+                  paddingVertical: 10,
+                  flex: 1
+                }]}
+                onPress={fixSupabaseIssues}
+                disabled={isLoading}
+              >
+                <Text style={[{ color: 'white', fontWeight: 'bold', textAlign: 'center', fontSize: 12 }]}>
+                  🔨 Fix Issues
                 </Text>
               </TouchableOpacity>
               
@@ -292,8 +341,8 @@ export default function DebugAccountSwitcher() {
                 style={[{
                   backgroundColor: currentTheme.surface,
                   borderRadius: 12,
-                  paddingHorizontal: 16,
-                  paddingVertical: 12,
+                  paddingHorizontal: 12,
+                  paddingVertical: 10,
                   borderWidth: 1,
                   borderColor: currentTheme.border,
                   flex: 1
@@ -301,40 +350,40 @@ export default function DebugAccountSwitcher() {
                 onPress={() => setIsVisible(false)}
                 disabled={isLoading}
               >
-                <Text style={[{ color: currentTheme.primary, fontWeight: 'bold', textAlign: 'center', fontSize: 14 }]}>
+                <Text style={[{ color: currentTheme.primary, fontWeight: 'bold', textAlign: 'center', fontSize: 12 }]}>
                   Close
                 </Text>
               </TouchableOpacity>
             </View>
 
-            {/* Info Box */}
+            {/* Troubleshooting Box */}
             <View style={[{
-              backgroundColor: '#e0f2fe',
+              backgroundColor: '#fef3c7',
               borderRadius: 12,
-              padding: 16,
+              padding: 12,
               borderLeftWidth: 4,
-              borderLeftColor: '#0288d1'
+              borderLeftColor: '#f59e0b'
             }]}>
-              <Text style={[{ color: '#01579b', fontWeight: 'bold', marginBottom: 8 }]}>
-                📧 Updated Email Formats
+              <Text style={[{ color: '#92400e', fontWeight: 'bold', marginBottom: 6, fontSize: 14 }]}>
+                🚨 Troubleshooting Supabase Issues
               </Text>
-              <Text style={[{ color: '#01579b', fontSize: 12, lineHeight: 16 }]}>
-                • Fixed email validation issues{'\n'}
-                • Using @gmail.com for compatibility{'\n'}
-                • All accounts use password: TestUser123!{'\n'}
-                • Tap "Create All" to set up test accounts
+              <Text style={[{ color: '#92400e', fontSize: 11, lineHeight: 14 }]}>
+                • RLS Policy Errors: Run SUPABASE_FIX.sql{'\n'}
+                • Email Not Confirmed: Click "Fix Issues"{'\n'}
+                • Rate Limiting: Wait 1 minute between attempts{'\n'}
+                • Profile Missing: Click "Fix Issues"
               </Text>
             </View>
 
             {/* Disclaimer */}
             <Text style={[{
               color: currentTheme.textSecondary,
-              fontSize: 12,
+              fontSize: 10,
               textAlign: 'center',
-              marginTop: 16,
+              marginTop: 12,
               fontStyle: 'italic'
             }]}>
-              ⚠️ Debug mode only - not visible in production
+              ⚠️ Debug mode only - includes Supabase fixes
             </Text>
           </View>
         </View>

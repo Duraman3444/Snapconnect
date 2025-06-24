@@ -13,6 +13,8 @@ import CameraScreen from './src/screens/CameraScreen';
 import StoriesScreen from './src/screens/StoriesScreen';
 import FriendsScreen from './src/screens/FriendsScreen';
 import ProfileScreen from './src/screens/ProfileScreen';
+import ChatsListScreen from './src/screens/ChatsListScreen';
+import ChatScreen from './src/screens/ChatScreen';
 
 // Import debug components
 import DebugAccountSwitcher from './src/components/DebugAccountSwitcher';
@@ -96,6 +98,8 @@ function AppNavigator() {
               }}
             />
             <Stack.Screen name="Profile" component={ProfileScreen} />
+            <Stack.Screen name="ChatsList" component={ChatsListScreen} />
+            <Stack.Screen name="Chat" component={ChatScreen} />
           </>
         ) : (
           // Authentication screens

@@ -327,6 +327,37 @@ export default function FriendsScreen({ navigation }) {
     );
   };
 
+  const startChat = async (friend) => {
+    if (!currentUser?.id || !friend?.id) {
+      Alert.alert('Error', 'Unable to start chat - missing user information');
+      return;
+    }
+
+    try {
+      // Get or create conversation between current user and friend
+      const { data: conversationId, error } = await supabase
+        .rpc('get_or_create_conversation', {
+          user_one: currentUser.id,
+          user_two: friend.id
+        });
+
+      if (error) {
+        console.error('Error creating conversation:', error);
+        Alert.alert('Error', 'Failed to start chat');
+        return;
+      }
+
+      // Navigate to chat screen
+      navigation.navigate('Chat', {
+        conversationId,
+        otherUser: friend
+      });
+    } catch (error) {
+      console.error('Error starting chat:', error);
+      Alert.alert('Error', 'Failed to start chat');
+    }
+  };
+
   const renderFriend = ({ item }) => (
     <View style={[{ backgroundColor: currentTheme.surface, borderRadius: 12, marginHorizontal: 16, marginBottom: 12, padding: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderWidth: 1, borderColor: currentTheme.border }]}>
       <View style={[{ flexDirection: 'row', alignItems: 'center', flex: 1 }]}>
@@ -341,12 +372,21 @@ export default function FriendsScreen({ navigation }) {
         </View>
       </View>
       
-      <TouchableOpacity
-        style={[{ backgroundColor: '#ef4444', paddingHorizontal: 20, paddingVertical: 10, borderRadius: 24 }]}
-        onPress={() => removeFriend(item.id)}
-      >
-        <Text style={[{ color: 'white', fontWeight: 'bold' }]}>❌ Remove</Text>
-      </TouchableOpacity>
+      <View style={[{ flexDirection: 'row', gap: 8 }]}>
+        <TouchableOpacity
+          style={[{ backgroundColor: currentTheme.primary, paddingHorizontal: 16, paddingVertical: 10, borderRadius: 20 }]}
+          onPress={() => startChat(item)}
+        >
+          <Text style={[{ color: currentTheme.background, fontWeight: 'bold', fontSize: 12 }]}>💬 Message</Text>
+        </TouchableOpacity>
+        
+        <TouchableOpacity
+          style={[{ backgroundColor: '#ef4444', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 20 }]}
+          onPress={() => removeFriend(item.id)}
+        >
+          <Text style={[{ color: 'white', fontWeight: 'bold', fontSize: 12 }]}>❌ Remove</Text>
+        </TouchableOpacity>
+      </View>
     </View>
   );
 
