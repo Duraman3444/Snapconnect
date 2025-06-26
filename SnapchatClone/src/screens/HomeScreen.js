@@ -397,6 +397,38 @@ export default function HomeScreen({ navigation }) {
               </TouchableOpacity>
             </View>
           </View>
+          
+          {/* Gamification & Seasonal Features */}
+          <View style={[{ backgroundColor: '#ffe4e6', borderRadius: 20, padding: 20, marginBottom: 24 }]}>
+            <Text style={[{ fontSize: 18, color: '#e11d48', fontWeight: 'bold', textAlign: 'center', marginBottom: 8 }]}>
+              🚀 Level Up Your Experience
+            </Text>
+            <Text style={[{ color: '#be185d', fontSize: 14, textAlign: 'center', marginBottom: 16 }]}>
+              Gamification, seasonal events, and more!
+            </Text>
+            <View style={[{ flexDirection: 'row', gap: 12 }]}>
+              <TouchableOpacity
+                style={[{ backgroundColor: 'white', borderRadius: 16, padding: 16, borderWidth: 2, borderColor: '#f59e0b', flex: 1, alignItems: 'center' }]}
+                onPress={() => navigation.navigate('Gamification')}
+              >
+                <Text style={[{ fontSize: 32, marginBottom: 8 }]}>🎮</Text>
+                <Text style={[{ color: '#d97706', fontWeight: 'bold', fontSize: 16, marginBottom: 4, textAlign: 'center' }]}>Gamification</Text>
+                <Text style={[{ color: '#92400e', fontSize: 11, textAlign: 'center' }]}>
+                  Study streaks • Badges • Challenges • Rewards
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[{ backgroundColor: 'white', borderRadius: 16, padding: 16, borderWidth: 2, borderColor: '#8b5cf6', flex: 1, alignItems: 'center' }]}
+                onPress={() => navigation.navigate('SeasonalFeatures')}
+              >
+                <Text style={[{ fontSize: 32, marginBottom: 8 }]}>🌟</Text>
+                <Text style={[{ color: '#7c3aed', fontWeight: 'bold', fontSize: 16, marginBottom: 4, textAlign: 'center' }]}>Seasonal Hub</Text>
+                <Text style={[{ color: '#5b21b6', fontSize: 11, textAlign: 'center' }]}>
+                  Move-in • Spring break • Finals • Sports
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
         </ScrollView>
       ) : (
         <FlatList

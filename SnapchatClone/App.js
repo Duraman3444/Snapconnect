@@ -46,6 +46,10 @@ import InternshipSharingScreen from './src/screens/InternshipSharingScreen';
 import LinkedInIntegrationScreen from './src/screens/LinkedInIntegrationScreen';
 import SkillsShowcaseScreen from './src/screens/SkillsShowcaseScreen';
 
+// Gamification and Seasonal Features
+import GamificationScreen from './src/screens/GamificationScreen';
+import SeasonalFeaturesScreen from './src/screens/SeasonalFeaturesScreen';
+
 // Import debug components
 import DebugAccountSwitcher from './src/components/DebugAccountSwitcher';
 
@@ -172,6 +176,10 @@ function AppNavigator() {
             <Stack.Screen name="InternshipSharing" component={InternshipSharingScreen} />
             <Stack.Screen name="LinkedInIntegration" component={LinkedInIntegrationScreen} />
             <Stack.Screen name="SkillsShowcase" component={SkillsShowcaseScreen} />
+            
+            {/* Gamification and Seasonal Features */}
+            <Stack.Screen name="Gamification" component={GamificationScreen} />
+            <Stack.Screen name="SeasonalFeatures" component={SeasonalFeaturesScreen} />
           </>
         ) : (
           // Authentication screens
