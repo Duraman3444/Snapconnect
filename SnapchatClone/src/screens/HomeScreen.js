@@ -178,12 +178,61 @@ export default function HomeScreen({ navigation }) {
           >
             <Text style={[{ color: currentTheme.background, fontWeight: 'bold', fontSize: 18 }]}>📷 Take Your First Snap</Text>
           </TouchableOpacity>
+          <View style={[{ flexDirection: 'row', marginBottom: 16 }]}>
+            <TouchableOpacity
+              style={[{ backgroundColor: currentTheme.surface, borderRadius: 24, paddingHorizontal: 24, paddingVertical: 16, borderWidth: 1, borderColor: currentTheme.border, flex: 1, marginRight: 8 }]}
+              onPress={() => navigation.navigate('Friends')}
+            >
+              <Text style={[{ color: currentTheme.primary, fontWeight: '600', fontSize: 16, textAlign: 'center' }]}>👥 Find Friends</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[{ backgroundColor: currentTheme.surface, borderRadius: 24, paddingHorizontal: 24, paddingVertical: 16, borderWidth: 1, borderColor: currentTheme.border, flex: 1, marginLeft: 8 }]}
+              onPress={() => navigation.navigate('AcademicCalendar')}
+            >
+              <Text style={[{ color: currentTheme.primary, fontWeight: '600', fontSize: 16, textAlign: 'center' }]}>📅 Calendar</Text>
+            </TouchableOpacity>
+          </View>
           <TouchableOpacity
-            style={[{ backgroundColor: currentTheme.surface, borderRadius: 24, paddingHorizontal: 32, paddingVertical: 16, borderWidth: 1, borderColor: currentTheme.border }]}
-            onPress={() => navigation.navigate('Friends')}
+            style={[{ backgroundColor: currentTheme.surface, borderRadius: 24, paddingHorizontal: 32, paddingVertical: 16, borderWidth: 1, borderColor: currentTheme.border, marginBottom: 20 }]}
+            onPress={() => navigation.navigate('Campus')}
           >
-            <Text style={[{ color: currentTheme.primary, fontWeight: '600', fontSize: 18 }]}>👥 Find Friends</Text>
+            <Text style={[{ color: currentTheme.primary, fontWeight: '600', fontSize: 18 }]}>🏫 Campus Life</Text>
           </TouchableOpacity>
+
+          {/* Academic Social Features Section */}
+          <Text style={[{ fontSize: 18, color: currentTheme.primary, fontWeight: 'bold', textAlign: 'center', marginBottom: 16 }]}>
+            🎓 Academic Social Features
+          </Text>
+          
+          <View style={[{ flexDirection: 'row', marginBottom: 16 }]}>
+            <TouchableOpacity
+              style={[{ backgroundColor: currentTheme.surface, borderRadius: 24, paddingHorizontal: 20, paddingVertical: 16, borderWidth: 1, borderColor: currentTheme.border, flex: 1, marginRight: 8 }]}
+              onPress={() => navigation.navigate('ProfessorReviews')}
+            >
+              <Text style={[{ color: currentTheme.primary, fontWeight: '600', fontSize: 14, textAlign: 'center' }]}>👨‍🏫 Prof Reviews</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[{ backgroundColor: currentTheme.surface, borderRadius: 24, paddingHorizontal: 20, paddingVertical: 16, borderWidth: 1, borderColor: currentTheme.border, flex: 1, marginLeft: 8 }]}
+              onPress={() => navigation.navigate('GradeCelebrations')}
+            >
+              <Text style={[{ color: currentTheme.primary, fontWeight: '600', fontSize: 14, textAlign: 'center' }]}>🎉 Grades</Text>
+            </TouchableOpacity>
+          </View>
+          
+          <View style={[{ flexDirection: 'row', marginBottom: 16 }]}>
+            <TouchableOpacity
+              style={[{ backgroundColor: currentTheme.surface, borderRadius: 24, paddingHorizontal: 20, paddingVertical: 16, borderWidth: 1, borderColor: currentTheme.border, flex: 1, marginRight: 8 }]}
+              onPress={() => navigation.navigate('CourseHashtags')}
+            >
+              <Text style={[{ color: currentTheme.primary, fontWeight: '600', fontSize: 14, textAlign: 'center' }]}>📚 Hashtags</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[{ backgroundColor: currentTheme.surface, borderRadius: 24, paddingHorizontal: 20, paddingVertical: 16, borderWidth: 1, borderColor: currentTheme.border, flex: 1, marginLeft: 8 }]}
+              onPress={() => navigation.navigate('TutoringMarketplace')}
+            >
+              <Text style={[{ color: currentTheme.primary, fontWeight: '600', fontSize: 14, textAlign: 'center' }]}>📖 Tutoring</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       ) : (
         <FlatList
@@ -223,37 +272,45 @@ export default function HomeScreen({ navigation }) {
 
       {/* Bottom Navigation */}
       <View style={[{ position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: currentTheme.surface, borderTopWidth: 1, borderTopColor: currentTheme.border, shadowColor: '#000', shadowOffset: { width: 0, height: -2 }, shadowOpacity: 0.1, shadowRadius: 8, elevation: 10 }]}>
-        <View style={[{ flexDirection: 'row', justifyContent: 'around', paddingVertical: 16 }]}>
+        <View style={[{ flexDirection: 'row', justifyContent: 'around', paddingVertical: 12 }]}>
           <TouchableOpacity
             onPress={() => navigation.navigate('Friends')}
             style={[{ alignItems: 'center', flex: 1 }]}
           >
-            <Text style={[{ fontSize: 24, marginBottom: 4 }]}>👥</Text>
-            <Text style={[{ fontSize: 12, color: currentTheme.primary, fontWeight: '600' }]}>Friends</Text>
+            <Text style={[{ fontSize: 20, marginBottom: 2 }]}>👥</Text>
+            <Text style={[{ fontSize: 10, color: currentTheme.primary, fontWeight: '600' }]}>Friends</Text>
           </TouchableOpacity>
           
           <TouchableOpacity
             onPress={() => navigation.navigate('Camera')}
             style={[{ alignItems: 'center', flex: 1 }]}
           >
-            <Text style={[{ fontSize: 24, marginBottom: 4 }]}>📷</Text>
-            <Text style={[{ fontSize: 12, color: currentTheme.primary, fontWeight: '600' }]}>Camera</Text>
+            <Text style={[{ fontSize: 20, marginBottom: 2 }]}>📷</Text>
+            <Text style={[{ fontSize: 10, color: currentTheme.primary, fontWeight: '600' }]}>Camera</Text>
           </TouchableOpacity>
           
           <TouchableOpacity
-            onPress={() => navigation.navigate('Stories')}
+            onPress={() => navigation.navigate('AcademicCalendar')}
             style={[{ alignItems: 'center', flex: 1 }]}
           >
-            <Text style={[{ fontSize: 24, marginBottom: 4 }]}>📖</Text>
-            <Text style={[{ fontSize: 12, color: currentTheme.primary, fontWeight: '600' }]}>Stories</Text>
+            <Text style={[{ fontSize: 20, marginBottom: 2 }]}>📅</Text>
+            <Text style={[{ fontSize: 10, color: currentTheme.primary, fontWeight: '600' }]}>Calendar</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={() => navigation.navigate('Campus')}
+            style={[{ alignItems: 'center', flex: 1 }]}
+          >
+            <Text style={[{ fontSize: 20, marginBottom: 2 }]}>🏫</Text>
+            <Text style={[{ fontSize: 10, color: currentTheme.primary, fontWeight: '600' }]}>Campus</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
             onPress={() => navigation.navigate('Profile')}
             style={[{ alignItems: 'center', flex: 1 }]}
           >
-            <Text style={[{ fontSize: 24, marginBottom: 4 }]}>👤</Text>
-            <Text style={[{ fontSize: 12, color: currentTheme.primary, fontWeight: '600' }]}>Profile</Text>
+            <Text style={[{ fontSize: 20, marginBottom: 2 }]}>👤</Text>
+            <Text style={[{ fontSize: 10, color: currentTheme.primary, fontWeight: '600' }]}>Profile</Text>
           </TouchableOpacity>
         </View>
       </View>

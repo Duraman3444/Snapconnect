@@ -1,20 +1,95 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { View, Text, TouchableOpacity, Alert, Image, StyleSheet, PanResponder, Dimensions, Modal, ScrollView, SafeAreaView } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
+import { Video } from 'expo-av';
 import * as MediaLibrary from 'expo-media-library';
+import * as FileSystem from 'expo-file-system';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '../context/SupabaseAuthContext';
 import { useTheme } from '../context/ThemeContext';
+
+// Updated function to find the most recent FILE of any type, with extensive logging.
+const findMostRecentFile = async (directory) => {
+  let mostRecentFile = null;
+  let maxModificationTime = 0;
+  console.log(`[SEARCH] Starting search for most recent *file* in: ${directory}`);
+
+  const search = async (dir) => {
+    try {
+      const items = await FileSystem.readDirectoryAsync(dir);
+      console.log(`[SEARCH] Items in ${dir}: ${items.join(', ')}`);
+      for (const item of items) {
+        const itemPath = `${dir}${item}`;
+        let info;
+        try {
+            info = await FileSystem.getInfoAsync(itemPath, { modificationTime: true });
+        } catch (e) {
+            console.log(`[SEARCH] Could not get info for ${itemPath}, skipping.`);
+            continue;
+        }
+
+        if (info.isDirectory) {
+          console.log(`[SEARCH] Found directory: ${itemPath}. Searching inside.`);
+          await search(`${itemPath}/`);
+        } else { // It's a file, of any type
+          if (info.modificationTime && info.modificationTime > maxModificationTime) {
+            maxModificationTime = info.modificationTime;
+            mostRecentFile = { uri: info.uri, modificationTime: info.modificationTime, name: item };
+            console.log(`[SEARCH] New most recent file found: ${mostRecentFile.name} (mod time: ${mostRecentFile.modificationTime})`);
+          }
+        }
+      }
+    } catch (error) {
+      console.error(`[SEARCH] Error reading directory ${dir}:`, error);
+    }
+  };
+
+  await search(directory.endsWith('/') ? directory : `${directory}/`);
+  console.log(`[SEARCH] Search complete. Most recent file found:`, mostRecentFile?.name);
+  return mostRecentFile;
+};
 
 export default function CameraScreen({ navigation }) {
   const [permission, requestPermission] = useCameraPermissions();
   const [facing, setFacing] = useState('back');
   const [photo, setPhoto] = useState(null);
+  const [video, setVideo] = useState(null);
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingDuration, setRecordingDuration] = useState(0);
+  const [maxRecordingTime] = useState(60); // 60 seconds max like Snapchat
   const [uploading, setUploading] = useState(false);
   const [showActionModal, setShowActionModal] = useState(false);
   const [friends, setFriends] = useState([]);
   const cameraRef = useRef();
+  const recordingTimerRef = useRef(null);
   const { currentUser, logout, supabase } = useAuth();
   const { currentTheme } = useTheme();
+  
+  const wasRecording = useRef(false);
+
+  useEffect(() => {
+    const showVideoWarning = async () => {
+      try {
+        const hasSeenWarning = await AsyncStorage.getItem('@videoWarningSeen');
+        if (!hasSeenWarning) {
+          Alert.alert(
+            "Video Recording Notice",
+            "Video recording in development mode can be unreliable. If a recorded video isn't found, it's likely due to running in Expo Go. This feature works best in a production build of the app.",
+            [{ text: "OK", onPress: () => AsyncStorage.setItem('@videoWarningSeen', 'true') }]
+          );
+        }
+      } catch (e) {
+        console.error("Failed to access AsyncStorage for video warning", e);
+      }
+    };
+
+    showVideoWarning();
+  }, []);
+
+  // Debug state changes
+  useEffect(() => {
+    console.log('🎬 State changed - video:', !!video, 'showActionModal:', showActionModal);
+  }, [video, showActionModal]);
 
   // Get screen dimensions for gesture detection
   const screenWidth = Dimensions.get('window').width;
@@ -28,8 +103,8 @@ export default function CameraScreen({ navigation }) {
       return Math.abs(gestureState.dx) > Math.abs(gestureState.dy) && Math.abs(gestureState.dx) > 20;
     },
     onPanResponderRelease: (_, gestureState) => {
-      // Only handle swipes if no photo is being previewed
-      if (photo) return;
+      // Only handle swipes if no photo/video is being previewed and not recording
+      if (photo || video || isRecording) return;
 
       const { dx, dy } = gestureState;
       
@@ -99,199 +174,261 @@ export default function CameraScreen({ navigation }) {
     }
   }, [currentUser]);
 
-  const takePicture = async () => {
-    if (cameraRef.current) {
-      try {
-        const photo = await cameraRef.current.takePictureAsync();
-        setPhoto(photo);
+  // This effect will trigger after a recording stops to process the video.
+  useEffect(() => {
+    if (wasRecording.current && !isRecording) {
+      handleVideoProcessing();
+    }
+    wasRecording.current = isRecording;
+  }, [isRecording]);
+
+  const handleVideoProcessing = async () => {
+    console.log('🏁 Video recording finished. Processing...');
+    
+    await new Promise(resolve => setTimeout(resolve, 1000)); 
+
+    console.log('🕵️‍♂️ Searching for the most recent file in cache...');
+    const cacheDir = FileSystem.cacheDirectory;
+    const foundFile = await findMostRecentFile(cacheDir);
+
+    if (foundFile) {
+      const now = Date.now() / 1000;
+      const age = now - foundFile.modificationTime;
+      console.log(`✅ Found most recent file: '${foundFile.name}', Age: ${age.toFixed(1)}s`);
+
+      // Now, we explicitly check if the file is a video
+      const isVideo = foundFile.name.toLowerCase().endsWith('.mp4') || foundFile.name.toLowerCase().endsWith('.mov');
+      
+      if (isVideo && age < maxRecordingTime + 15) {
+        console.log(`✅ File is a recent video. Using it.`);
+        setVideo({ uri: foundFile.uri });
         setShowActionModal(true);
+        setPhoto(null);
+        return;
+      } else if (isVideo) {
+        console.log(`[WARN] Found a video file, but it is too old (${age.toFixed(1)}s), discarding.`);
+      } else {
+        console.log(`[ERROR] Found a recent file, but it is not a video: ${foundFile.name}`);
+      }
+    }
+    
+    console.log('🚨 No recent *video* file found after search. Showing error.');
+    Alert.alert("Recording Error", "Could not save the recorded video. This is likely an issue with running in the Expo Go app. Please try again, and consider creating a development build for reliable video support.");
+    resetState();
+  };
+
+  // Simple Video Recording Logic - based on working tutorials
+  const recordVideo = async () => {
+    if (cameraRef.current && !isRecording) {
+      try {
+        console.log("📹 Starting video recording...");
+        setIsRecording(true);
+        setRecordingDuration(0);
+        
+        // Start timer
+        recordingTimerRef.current = setInterval(() => {
+          setRecordingDuration(prev => prev + 1);
+        }, 1000);
+
+        const videoRecordPromise = cameraRef.current.recordAsync();
+        
+        if (videoRecordPromise) {
+          const data = await videoRecordPromise;
+          const source = data.uri;
+          if (source) {
+            console.log("✅ Video recorded successfully:", source);
+            setVideo({ uri: source });
+            setPhoto(null);
+            setShowActionModal(true);
+          }
+        }
       } catch (error) {
-        Alert.alert('Error', 'Failed to take picture');
-        console.error('Take picture error:', error);
+        console.error("❌ Video recording error:", error);
+        Alert.alert("Recording Error", "Failed to record video.");
       }
     }
   };
 
-  // Send photo as ephemeral message to specific friend
-  const sendPhotoMessage = async (friend) => {
-    if (!photo || !friend) return;
+  const stopVideoRecording = () => {
+    if (cameraRef.current && isRecording) {
+      console.log("🛑 Stopping video recording...");
+      setIsRecording(false);
+      if (recordingTimerRef.current) {
+        clearInterval(recordingTimerRef.current);
+        recordingTimerRef.current = null;
+      }
+      cameraRef.current.stopRecording();
+    }
+  };
 
+  const takePicture = async () => {
+    if (cameraRef.current && !isRecording) {
+        try {
+            console.log("📸 Taking picture...");
+            const photoData = await cameraRef.current.takePictureAsync();
+            setPhoto(photoData);
+            setVideo(null);
+            setShowActionModal(true);
+        } catch (error) {
+            console.error("❌ Failed to take picture", error);
+            Alert.alert('Error', 'Could not take picture.');
+        }
+    }
+  };
+
+  const resetState = () => {
+    setPhoto(null);
+    setVideo(null);
+    setShowActionModal(false);
+    setUploading(false);
+  };
+  
+  // Generic upload function
+  const uploadMedia = async (mediaUri, bucket, mediaType) => {
     try {
-      setUploading(true);
+      console.log(`🌐 Storage request: POST https://qwyftjzaeettvxfmjieu.supabase.co/storage/v1/object/${bucket}/${currentUser.id}/${new Date().toISOString()}.${mediaType === 'photo' ? 'jpg' : 'mp4'}`);
       
-      console.log('Original photo URI:', photo.uri);
-
-      // ✅ STEP 1: Upload photo to Supabase Storage using ArrayBuffer approach
-      const fileName = `messages/${currentUser.id}/${Date.now()}.jpg`;
+      // Read the file as binary data
+      const fileUri = mediaUri.startsWith('file://') ? mediaUri : `file://${mediaUri}`;
+      const fileInfo = await FileSystem.getInfoAsync(fileUri);
       
-      // Use ArrayBuffer for reliable upload
-      const response = await fetch(photo.uri);
+      if (!fileInfo.exists) {
+        throw new Error('File does not exist');
+      }
+      
+      console.log(`📁 File info: size=${fileInfo.size}, exists=${fileInfo.exists}`);
+      
+      const fileName = `${currentUser.id}/${new Date().toISOString()}.${mediaType === 'photo' ? 'jpg' : 'mp4'}`;
+      const contentType = mediaType === 'photo' ? 'image/jpeg' : 'video/mp4';
+      
+      // Use fetch with the file URI - this should work in React Native
+      const response = await fetch(fileUri);
+      if (!response.ok) {
+        throw new Error(`Failed to read file: ${response.status}`);
+      }
+      
       const arrayBuffer = await response.arrayBuffer();
-      const uint8Array = new Uint8Array(arrayBuffer);
+      console.log(`📦 ArrayBuffer created: ${arrayBuffer.byteLength} bytes`);
       
-      console.log('Message photo file size:', uint8Array.length, 'bytes');
-
-      const { data: uploadData, error: uploadError } = await supabase.storage
-        .from('media')
-        .upload(fileName, uint8Array, {
-          contentType: 'image/jpeg',
+      // Upload ArrayBuffer to Supabase
+      const { error: uploadError } = await supabase.storage
+        .from(bucket)
+        .upload(fileName, arrayBuffer, { 
+          contentType,
+          upsert: true 
         });
+        
+      if (uploadError) throw uploadError;
+      
+      const { data: urlData } = supabase.storage.from(bucket).getPublicUrl(fileName);
+      if (!urlData || !urlData.publicUrl) throw new Error('Failed to get public URL.');
+      
+      console.log(`✅ Upload successful: ${urlData.publicUrl}`);
+      return urlData.publicUrl;
+    } catch (error) {
+      console.error(`Error uploading to ${bucket}:`, error);
+      Alert.alert('Upload Failed', `Could not upload your ${mediaType}.`);
+      return null;
+    }
+  };
 
-      if (uploadError) {
-        console.error('Photo upload error:', uploadError);
-        throw uploadError;
-      }
+  // Send photo or video to a friend
+  const sendSnap = async (friend) => {
+    if (uploading) return;
+    const media = photo || video;
+    const mediaType = photo ? 'photo' : 'video';
+    if (!media || !media.uri) return;
+    setUploading(true);
+    
+    try {
+      const publicUrl = await uploadMedia(media.uri, 'snaps', mediaType);
+      if (publicUrl) {
+        // Get or create conversation first
+        const { data: conversationId, error: convError } = await supabase
+          .rpc('get_or_create_conversation', {
+            user_one: currentUser.id,
+            user_two: friend.id
+          });
 
-      console.log('Photo upload successful:', uploadData);
+        if (convError) {
+          console.error('Conversation error:', convError);
+          Alert.alert('Error', 'Failed to create conversation.');
+          setUploading(false);
+          return;
+        }
 
-      // ✅ STEP 2: Get public URL
-      const { data: urlData } = supabase.storage
-        .from('media')
-        .getPublicUrl(fileName);
-
-      const publicUrl = urlData.publicUrl;
-      console.log('Generated photo message URL:', publicUrl);
-
-      // ✅ FALLBACK: If public URL might not work, also generate a signed URL
-      const { data: signedUrlData, error: signedUrlError } = await supabase.storage
-        .from('media')
-        .createSignedUrl(fileName, 60 * 60 * 24 * 7); // 7 days
-
-      let finalImageUrl = publicUrl;
-      if (signedUrlData && !signedUrlError) {
-        console.log('Generated signed URL as fallback:', signedUrlData.signedUrl);
-        // For now, let's try the signed URL since public URLs are failing
-        finalImageUrl = signedUrlData.signedUrl;
-      }
-
-      // ✅ STEP 3: Get or create conversation
-      const { data: conversationId, error: convError } = await supabase
-        .rpc('get_or_create_conversation', {
-          user_one: currentUser.id,
-          user_two: friend.id
-        });
-
-      if (convError) {
-        console.error('Conversation error:', convError);
-        throw convError;
-      }
-
-      console.log('Conversation ID for photo:', conversationId);
-
-      if (!conversationId) {
-        throw new Error('Failed to create conversation');
-      }
-
-      // ✅ STEP 4: Send photo message with uploaded URL
-      const { error: messageError } = await supabase
-        .from('messages')
-        .insert({
-          conversation_id: conversationId, 
-          sender_id: currentUser.id,
-          receiver_id: friend.id,
-          content: '📸 Photo',
-          message_type: 'image',
-          image_url: finalImageUrl, // ← NOW USING UPLOADED URL!
+        const { error } = await supabase.from('messages').insert({ 
+          conversation_id: conversationId,
+          sender_id: currentUser.id, 
+          receiver_id: friend.id, 
+          content: mediaType === 'photo' ? '📸 Photo' : '🎥 Video',
+          message_type: mediaType === 'photo' ? 'image' : 'video',
+          media_url: publicUrl, 
+          media_type: mediaType,
+          image_url: mediaType === 'photo' ? publicUrl : null,
+          video_url: mediaType === 'video' ? publicUrl : null,
           is_ephemeral: true
         });
-
-      if (messageError) {
-        console.error('Message insert error:', messageError);
-        throw messageError;
+        
+        if (error) {
+          Alert.alert('Error', 'Failed to send snap.');
+          console.error("Message insert error:", error);
+        } else {
+          Alert.alert('Success', `Snap sent to ${friend.username}!`);
+          resetState();
+        }
       }
-      
-      Alert.alert('Success', `Photo sent to ${friend.username}!`);
-      setPhoto(null);
-      setShowActionModal(false);
     } catch (error) {
-      Alert.alert('Error', 'Failed to send photo: ' + error.message);
-      console.error('Send photo error:', error);
+      console.error('Error in sendSnap:', error);
+      Alert.alert('Error', 'Failed to send snap.');
     } finally {
       setUploading(false);
     }
   };
 
-  // Post photo as story
+  // Upload photo or video as a story
   const uploadStory = async () => {
-    if (!photo) return;
-
+    if (uploading) return;
+    const media = photo || video;
+    const mediaType = photo ? 'photo' : 'video';
+    if (!media || !media.uri) return;
+    setUploading(true);
+    
     try {
-      setUploading(true);
-      
-      console.log('Uploading story from URI:', photo.uri);
-      
-      // Use the same approach that works for messages
-      const fileName = `stories/${currentUser.id}/${Date.now()}.jpg`;
-      
-      // Try reading the file as ArrayBuffer for more reliable upload
-      const response = await fetch(photo.uri);
-      const arrayBuffer = await response.arrayBuffer();
-      const uint8Array = new Uint8Array(arrayBuffer);
-      
-      console.log('Story file size:', uint8Array.length, 'bytes');
-
-      const { data: uploadData, error: uploadError } = await supabase.storage
-        .from('media')
-        .upload(fileName, uint8Array, {
-          contentType: 'image/jpeg',
+      const publicUrl = await uploadMedia(media.uri, 'stories', mediaType);
+      if (publicUrl) {
+        const { error } = await supabase.from('stories').insert({ 
+          user_id: currentUser.id,
+          username: currentUser.username || currentUser.email || 'Anonymous',
+          media_url: publicUrl, 
+          media_type: mediaType,
+          image_url: mediaType === 'photo' ? publicUrl : null,
+          video_url: mediaType === 'video' ? publicUrl : null,
+          type: mediaType === 'photo' ? 'story' : 'video_story',
+          expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+          viewers: []
         });
-
-      if (uploadError) {
-        console.error('Story upload error:', uploadError);
-        throw uploadError;
+        
+        if (error) {
+          Alert.alert('Error', 'Failed to post story.');
+          console.error("Story insert error:", error);
+        } else {
+          Alert.alert('Success', 'Story posted!');
+          resetState();
+        }
       }
-
-      console.log('Story upload successful:', uploadData);
-
-      // Get public URL - UPDATED METHOD
-      const { data: urlData } = supabase.storage
-        .from('media')
-        .getPublicUrl(fileName);
-
-      const publicUrl = urlData.publicUrl;
-      console.log('Generated story URL:', publicUrl);
-
-      // ✅ FALLBACK: Generate signed URL for stories too
-      const { data: signedUrlData, error: signedUrlError } = await supabase.storage
-        .from('media')
-        .createSignedUrl(fileName, 60 * 60 * 24 * 7); // 7 days
-
-      let finalStoryUrl = publicUrl;
-      if (signedUrlData && !signedUrlError) {
-        console.log('Generated signed story URL as fallback:', signedUrlData.signedUrl);
-        // Use signed URL since public URLs are failing
-        finalStoryUrl = signedUrlData.signedUrl;
-      }
-      
-      // Save story data to Supabase
-      const { error: insertError } = await supabase.from('stories').insert({
-        user_id: currentUser.id,
-        username: currentUser.username || 'Anonymous',
-        image_url: finalStoryUrl,
-        type: 'story',
-        created_at: new Date().toISOString(),
-        expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(), // 24 hours from now
-        viewers: []
-      });
-
-      if (insertError) {
-        console.error('Story database insert error:', insertError);
-        throw insertError;
-      }
-      
-      Alert.alert('Success', 'Story posted!');
-      setPhoto(null);
-      setShowActionModal(false);
     } catch (error) {
-      Alert.alert('Error', 'Failed to post story: ' + error.message);
-      console.error('Upload story error:', error);
+      console.error('Error in uploadStory:', error);
+      Alert.alert('Error', 'Failed to upload story.');
     } finally {
       setUploading(false);
     }
   };
 
   const retakePhoto = () => {
+    console.log('Retaking photo/video');
     setPhoto(null);
+    setVideo(null);
     setShowActionModal(false);
   };
 
@@ -327,11 +464,33 @@ export default function CameraScreen({ navigation }) {
     );
   }
 
-  // Photo preview and action modal
-  if (photo && showActionModal) {
+  // Photo/Video preview and action modal
+  if ((photo || video) && showActionModal) {
+    console.log('🎬 Rendering action modal - photo:', !!photo, 'video:', !!video, 'showActionModal:', showActionModal);
+    if (video) {
+      console.log('🎬 Video URI for modal:', video.uri);
+    }
+    
     return (
       <View className="flex-1 bg-black">
-        <Image source={{ uri: photo.uri }} className="flex-1" />
+        {photo ? (
+          <Image source={{ uri: photo.uri }} className="flex-1" />
+        ) : video.uri === 'placeholder' ? (
+          <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#333' }}>
+            <Text style={{ color: 'white', fontSize: 18 }}>📹</Text>
+            <Text style={{ color: 'white', marginTop: 10 }}>Video Recording Complete</Text>
+            <Text style={{ color: 'white', fontSize: 12, marginTop: 5 }}>Duration: {recordingDuration}s</Text>
+          </View>
+        ) : (
+          <Video
+            source={{ uri: video.uri }}
+            style={{ flex: 1 }}
+            useNativeControls={false}
+            shouldPlay={true}
+            isLooping={false}
+            resizeMode="cover"
+          />
+        )}
         
         {/* Action Modal */}
         <View style={styles.photoActionModal}>
@@ -349,7 +508,7 @@ export default function CameraScreen({ navigation }) {
               textAlign: 'center',
               color: currentTheme.text
             }]}>
-              Share Photo
+              Share {photo ? 'Photo' : 'Video'}
             </Text>
             
             {/* Action Buttons */}
@@ -371,7 +530,7 @@ export default function CameraScreen({ navigation }) {
                   textAlign: 'center',
                   fontSize: 16
                 }]}>
-                  📖 Post Story
+                  {uploading ? 'Uploading...' : '📖 Post Story'}
                 </Text>
               </TouchableOpacity>
               
@@ -385,7 +544,7 @@ export default function CameraScreen({ navigation }) {
                   borderColor: currentTheme.primary,
                   marginLeft: 8
                 }]}
-                onPress={retakePhoto}
+                onPress={resetState}
               >
                 <Text style={[{ 
                   color: currentTheme.primary, 
@@ -421,7 +580,7 @@ export default function CameraScreen({ navigation }) {
                     borderRadius: 12,
                     backgroundColor: currentTheme.background
                   }]}
-                  onPress={() => sendPhotoMessage(friend)}
+                  onPress={() => sendSnap(friend)}
                   disabled={uploading}
                 >
                   <View style={[{
@@ -459,7 +618,7 @@ export default function CameraScreen({ navigation }) {
                 fontStyle: 'italic',
                 marginVertical: 20
               }]}>
-                Add friends to send photos to them!
+                Add friends to send photos and videos to them!
               </Text>
             )}
           </View>
@@ -478,9 +637,9 @@ export default function CameraScreen({ navigation }) {
       
       {/* Top Header */}
       <View style={styles.topHeader}>
-        <TouchableOpacity onPress={() => navigation.navigate('ChatsList')}>
+        <TouchableOpacity onPress={() => navigation.navigate('Home')}>
           <View style={[{ borderRadius: 20, padding: 8 }, { backgroundColor: currentTheme.primary }]}>
-            <Text style={[{ fontWeight: 'bold', fontSize: 18 }, { color: currentTheme.background }]}>💬</Text>
+            <Text style={[{ fontWeight: 'bold', fontSize: 18 }, { color: currentTheme.background }]}>🏠</Text>
           </View>
         </TouchableOpacity>
         <Text style={[{ fontSize: 24, fontWeight: 'bold' }, { color: currentTheme.primary }]}>👻 SnapConnect</Text>
@@ -488,6 +647,43 @@ export default function CameraScreen({ navigation }) {
           <View style={[{ borderRadius: 20, padding: 8 }, { backgroundColor: currentTheme.primary }]}>
             <Text style={[{ fontWeight: 'bold', fontSize: 18 }, { color: currentTheme.background }]}>👤</Text>
           </View>
+        </TouchableOpacity>
+      </View>
+
+      {/* Quick Access Buttons for College Features */}
+      <View style={{
+        position: 'absolute',
+        top: 100,
+        right: 20,
+        flexDirection: 'column',
+        gap: 10
+      }}>
+        <TouchableOpacity
+          onPress={() => navigation.navigate('AcademicCalendar')}
+          style={{
+            backgroundColor: 'rgba(0, 0, 0, 0.7)',
+            borderRadius: 25,
+            padding: 12,
+            alignItems: 'center',
+            minWidth: 50
+          }}
+        >
+          <Text style={{ color: 'white', fontSize: 20 }}>📅</Text>
+          <Text style={{ color: 'white', fontSize: 10, marginTop: 2 }}>Calendar</Text>
+        </TouchableOpacity>
+        
+        <TouchableOpacity
+          onPress={() => navigation.navigate('Campus')}
+          style={{
+            backgroundColor: 'rgba(0, 0, 0, 0.7)',
+            borderRadius: 25,
+            padding: 12,
+            alignItems: 'center',
+            minWidth: 50
+          }}
+        >
+          <Text style={{ color: 'white', fontSize: 20 }}>🏫</Text>
+          <Text style={{ color: 'white', fontSize: 10, marginTop: 2 }}>Campus</Text>
         </TouchableOpacity>
       </View>
 
@@ -525,12 +721,38 @@ export default function CameraScreen({ navigation }) {
           <Text style={{ fontSize: 20, fontWeight: 'bold' }}>🔄</Text>
         </TouchableOpacity>
         
-        <TouchableOpacity
-          style={[styles.captureButton, { backgroundColor: 'white', justifyContent: 'center', alignItems: 'center', borderRadius: 42.5 }]}
-          onPress={takePicture}
-        >
-          <View style={[styles.captureButtonInner, { backgroundColor: 'black', borderRadius: 37.5 }]} />
-        </TouchableOpacity>
+        <View style={{ alignItems: 'center' }}>
+          <TouchableOpacity
+            style={[styles.captureButton, { 
+              backgroundColor: isRecording ? '#ff4444' : 'white',
+              justifyContent: 'center',
+              alignItems: 'center'
+            }]}
+            onPress={takePicture}
+            onLongPress={recordVideo}
+            onPressOut={stopVideoRecording}
+          >
+            <View style={[styles.captureButtonInner, { 
+              backgroundColor: isRecording ? 'white' : 'black'
+            }]} />
+          </TouchableOpacity>
+          
+          {isRecording && (
+            <View style={{ marginTop: 8, alignItems: 'center' }}>
+              <Text style={{ color: 'white', fontSize: 14, fontWeight: 'bold' }}>
+                {recordingDuration}s / {maxRecordingTime}s
+              </Text>
+            </View>
+          )}
+          
+          {!isRecording && (
+            <View style={{ marginTop: 8, alignItems: 'center' }}>
+              <Text style={{ color: 'rgba(255, 255, 255, 0.7)', fontSize: 12, textAlign: 'center' }}>
+                Tap for photo{'\n'}Hold for video
+              </Text>
+            </View>
+          )}
+        </View>
         
         <TouchableOpacity
           style={[{ borderRadius: 25, padding: 16 }, { backgroundColor: 'rgba(255, 255, 255, 0.9)' }]}
@@ -569,10 +791,12 @@ const styles = StyleSheet.create({
   captureButton: {
     width: 85,
     height: 85,
+    borderRadius: 42.5
   },
   captureButtonInner: {
     width: 75,
     height: 75,
+    borderRadius: 37.5
   },
   photoOverlay: {
     position: 'absolute',

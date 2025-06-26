@@ -17,6 +17,13 @@ import ProfileScreen from './src/screens/ProfileScreen';
 import ChatsListScreen from './src/screens/ChatsListScreen';
 import ChatScreen from './src/screens/ChatScreen';
 import CreateGroupScreen from './src/screens/CreateGroupScreen';
+import AcademicCalendarScreen from './src/screens/SimpleAcademicScreen';
+import CampusScreen from './src/screens/SimpleCampusScreen';
+// Academic Social Features
+import CourseHashtagsScreen from './src/screens/CourseHashtagsScreen';
+import ProfessorReviewsScreen from './src/screens/ProfessorReviewsScreen';
+import GradeCelebrationsScreen from './src/screens/GradeCelebrationsScreen';
+import TutoringMarketplaceScreen from './src/screens/TutoringMarketplaceScreen';
 
 // Import debug components
 import DebugAccountSwitcher from './src/components/DebugAccountSwitcher';
@@ -116,6 +123,13 @@ function AppNavigator() {
             <Stack.Screen name="ChatsList" component={ChatsListScreen} />
             <Stack.Screen name="Chat" component={ChatScreen} />
             <Stack.Screen name="CreateGroup" component={CreateGroupScreen} />
+            <Stack.Screen name="AcademicCalendar" component={AcademicCalendarScreen} />
+            <Stack.Screen name="Campus" component={CampusScreen} />
+            {/* Academic Social Features */}
+            <Stack.Screen name="CourseHashtags" component={CourseHashtagsScreen} />
+            <Stack.Screen name="ProfessorReviews" component={ProfessorReviewsScreen} />
+            <Stack.Screen name="GradeCelebrations" component={GradeCelebrationsScreen} />
+            <Stack.Screen name="TutoringMarketplace" component={TutoringMarketplaceScreen} />
           </>
         ) : (
           // Authentication screens

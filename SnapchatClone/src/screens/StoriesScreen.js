@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, Image, TouchableOpacity, Alert, Dimensions, FlatList, PanResponder } from 'react-native';
+import { Video } from 'expo-av';
 import { useAuth } from '../context/SupabaseAuthContext';
 import { useTheme } from '../context/ThemeContext';
 import ImageWithFallback from '../components/ImageWithFallback';
@@ -122,7 +123,9 @@ export default function StoriesScreen({ navigation, route }) {
   // If viewing a specific snap or story
   if (snap) {
     const isStory = snap.type === 'story';
+    const isVideoStory = snap.type === 'video_story';
     const imageUrl = snap.image_url || snap.imageUrl;
+    const videoUrl = snap.video_url || snap.videoUrl;
     const username = snap.username || snap.sender_username;
     const createdAt = snap.created_at || snap.createdAt;
     
@@ -161,15 +164,26 @@ export default function StoriesScreen({ navigation, route }) {
           </TouchableOpacity>
         </View>
 
-        {/* Snap/Story image */}
-        <ImageWithFallback
-          source={{ uri: imageUrl }}
-          style={{ width, height }}
-          resizeMode="cover"
-          fallbackText="📸"
-          fallbackSubtext="Story couldn't load"
-          onPress={closeStory}
-        />
+        {/* Snap/Story content */}
+        {isVideoStory && videoUrl ? (
+          <Video
+            source={{ uri: videoUrl }}
+            style={{ width, height }}
+            useNativeControls={false}
+            shouldPlay={true}
+            isLooping={false}
+            resizeMode="cover"
+          />
+        ) : (
+          <ImageWithFallback
+            source={{ uri: imageUrl }}
+            style={{ width, height }}
+            resizeMode="cover"
+            fallbackText="📸"
+            fallbackSubtext="Story couldn't load"
+            onPress={closeStory}
+          />
+        )}
 
         {/* Timer display */}
         <View style={[{ position: 'absolute', bottom: 32, right: 16 }]}>
@@ -204,15 +218,28 @@ export default function StoriesScreen({ navigation, route }) {
         </View>
       </View>
       <View style={[{ backgroundColor: currentTheme.border, borderRadius: 12, height: 192, justifyContent: 'center', alignItems: 'center' }]}>
-        <ImageWithFallback
-          source={{ uri: item.image_url }}
-          style={[{ width: '100%', height: '100%', borderRadius: 12 }]}
-          resizeMode="cover"
-          fallbackText="📖"
-          fallbackSubtext="Story preview"
-        />
+        {item.type === 'video_story' && item.video_url ? (
+          <Video
+            source={{ uri: item.video_url }}
+            style={[{ width: '100%', height: '100%', borderRadius: 12 }]}
+            useNativeControls={false}
+            shouldPlay={false}
+            isLooping={false}
+            resizeMode="cover"
+          />
+        ) : (
+          <ImageWithFallback
+            source={{ uri: item.image_url }}
+            style={[{ width: '100%', height: '100%', borderRadius: 12 }]}
+            resizeMode="cover"
+            fallbackText="📖"
+            fallbackSubtext="Story preview"
+          />
+        )}
         <View style={[{ position: 'absolute', bottom: 8, right: 8, backgroundColor: 'rgba(0, 0, 0, 0.6)', borderRadius: 12, paddingHorizontal: 8, paddingVertical: 4 }]}>
-          <Text style={[{ color: 'white', fontSize: 12, fontWeight: 'bold' }]}>📖 Tap to view</Text>
+          <Text style={[{ color: 'white', fontSize: 12, fontWeight: 'bold' }]}>
+            {item.type === 'video_story' ? '🎥 Video Story' : '📖 Tap to view'}
+          </Text>
         </View>
       </View>
     </TouchableOpacity>

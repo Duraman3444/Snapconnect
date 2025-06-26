@@ -18,8 +18,9 @@
     "ios": {
       "supportsTablet": true,
       "infoPlist": {
-        "NSCameraUsageDescription": "This app needs access to camera to take photos for snaps.",
-        "NSPhotoLibraryUsageDescription": "This app needs access to photo library to save photos."
+        "NSCameraUsageDescription": "This app needs access to camera to take photos and record videos for snaps.",
+        "NSMicrophoneUsageDescription": "This app needs access to microphone to record videos with audio.",
+        "NSPhotoLibraryUsageDescription": "This app needs access to photo library to save photos and videos."
       }
     },
     "android": {
@@ -42,7 +43,8 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "Allow $(PRODUCT_NAME) to access your camera to take photos for snaps."
+          "cameraPermission": "Allow $(PRODUCT_NAME) to access your camera to take photos and record videos for snaps.",
+          "microphonePermission": "Allow $(PRODUCT_NAME) to access your microphone to record videos with audio."
         }
       ]
     ]

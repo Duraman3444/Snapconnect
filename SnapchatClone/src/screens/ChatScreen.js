@@ -12,6 +12,7 @@ import {
   Image,
   Dimensions
 } from 'react-native';
+import { Video } from 'expo-av';
 import { useAuth } from '../context/SupabaseAuthContext';
 import { useTheme } from '../context/ThemeContext';
 import ImageWithFallback from '../components/ImageWithFallback';
@@ -470,6 +471,7 @@ export default function ChatScreen({ navigation, route }) {
       new Date(item.created_at) - new Date(previousMessage.created_at) > 5 * 60 * 1000; // 5 minutes
 
     const isImageMessage = item.message_type === 'image';
+    const isVideoMessage = item.message_type === 'video';
     
     // Show sender name for group messages when sender changes or after timestamp
     const showSenderName = isGroup && !isMyMessage && (
@@ -526,9 +528,13 @@ export default function ChatScreen({ navigation, route }) {
           onLongPress={() => {
             // Show confirmation for ephemeral messages
             if (item.is_ephemeral && !isMyMessage && !item.viewed_at) {
+              let alertMessage = 'This message will disappear after you view it.';
+              if (isImageMessage) alertMessage = 'This photo will disappear after you view it.';
+              if (isVideoMessage) alertMessage = 'This video will disappear after you view it.';
+              
               Alert.alert(
                 '👻 View Message?',
-                isImageMessage ? 'This photo will disappear after you view it.' : 'This message will disappear after you view it.',
+                alertMessage,
                 [
                   { text: 'Cancel', style: 'cancel' },
                   { 
@@ -542,11 +548,11 @@ export default function ChatScreen({ navigation, route }) {
           }}
         >
           <View style={[{
-            maxWidth: isImageMessage ? '70%' : '80%',
-            backgroundColor: isImageMessage ? 'transparent' : (isMyMessage ? currentTheme.primary : currentTheme.surface),
+            maxWidth: (isImageMessage || isVideoMessage) ? '70%' : '80%',
+            backgroundColor: (isImageMessage || isVideoMessage) ? 'transparent' : (isMyMessage ? currentTheme.primary : currentTheme.surface),
             borderRadius: 20,
-            paddingHorizontal: isImageMessage ? 0 : 16,
-            paddingVertical: isImageMessage ? 0 : 12,
+            paddingHorizontal: (isImageMessage || isVideoMessage) ? 0 : 16,
+            paddingVertical: (isImageMessage || isVideoMessage) ? 0 : 12,
             borderBottomRightRadius: isMyMessage ? 4 : 20,
             borderBottomLeftRadius: isMyMessage ? 20 : 4,
             shadowColor: currentTheme.text,
@@ -559,8 +565,78 @@ export default function ChatScreen({ navigation, route }) {
             borderColor: item.is_ephemeral ? (isMyMessage ? currentTheme.background : currentTheme.primary) : 'transparent'
           }]}>
             
-            {/* Image Message */}
-            {isImageMessage && item.image_url ? (
+            {/* Video Message */}
+            {isVideoMessage && item.video_url ? (
+              <View>
+                <Video
+                  source={{ uri: item.video_url }}
+                  style={[{
+                    width: screenWidth * 0.6,
+                    height: screenWidth * 0.8,
+                    borderRadius: 16,
+                    backgroundColor: currentTheme.surface
+                  }]}
+                  useNativeControls={true}
+                  shouldPlay={false}
+                  isLooping={false}
+                  resizeMode="cover"
+                />
+                
+                {/* Video message overlay */}
+                <View style={[{
+                  position: 'absolute',
+                  bottom: 0,
+                  left: 0,
+                  right: 0,
+                  backgroundColor: 'rgba(0, 0, 0, 0.6)',
+                  borderBottomLeftRadius: 16,
+                  borderBottomRightRadius: 16,
+                  paddingHorizontal: 12,
+                  paddingVertical: 8
+                }]}>
+                  {item.is_ephemeral && (
+                    <View style={[{ 
+                      flexDirection: 'row', 
+                      alignItems: 'center', 
+                      justifyContent: 'space-between'
+                    }]}>
+                      <Text style={[{
+                        fontSize: 10,
+                        color: 'white',
+                        opacity: 0.9
+                      }]}>
+                        👻 {isMyMessage ? 'Disappears when viewed' : 'Tap to view & delete'}
+                      </Text>
+                      {item.time_remaining_seconds > 0 && (
+                        <Text style={[{
+                          fontSize: 10,
+                          color: 'white',
+                          fontWeight: 'bold'
+                        }]}>
+                          {formatTimeRemaining(item.time_remaining_seconds)}
+                        </Text>
+                      )}
+                    </View>
+                  )}
+                </View>
+              </View>
+            ) : isVideoMessage ? (
+              /* Fallback for missing video_url */
+              <View style={[{
+                width: screenWidth * 0.6,
+                height: screenWidth * 0.8,
+                borderRadius: 16,
+                backgroundColor: currentTheme.surface,
+                justifyContent: 'center',
+                alignItems: 'center'
+              }]}>
+                <Text style={[{ fontSize: 32, marginBottom: 8 }]}>🎥</Text>
+                <Text style={[{ color: currentTheme.textSecondary, fontSize: 14 }]}>Video not available</Text>
+              </View>
+            ) : 
+            
+            /* Image Message */
+            isImageMessage && item.image_url ? (
               <View>
                 <ImageWithFallback
                   source={{ uri: item.image_url }}
