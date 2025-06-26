@@ -1,8 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { View, Text, TouchableOpacity, Alert, Image, StyleSheet, PanResponder, Dimensions, Modal, ScrollView, SafeAreaView } from 'react-native';
+import { View, Text, TouchableOpacity, Alert, Image, StyleSheet, PanResponder, Dimensions, Modal, ScrollView, SafeAreaView, Platform } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { Video } from 'expo-av';
 import * as MediaLibrary from 'expo-media-library';
+import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '../context/SupabaseAuthContext';
@@ -444,6 +445,224 @@ export default function CameraScreen({ navigation }) {
     }
   };
 
+  const importPhotoFromGallery = async () => {
+    try {
+      console.log('📁 Starting photo import from gallery...');
+      console.log('📁 Platform check - running on:', Platform.OS);
+      
+      // Check if we're running in Expo Go or web (common limitation)
+      if (Platform.OS === 'web') {
+        Alert.alert(
+          'Not Available on Web',
+          'Photo gallery access is not available when running on web. Please test on a mobile device or emulator.',
+          [{ text: 'OK' }]
+        );
+        return;
+      }
+      
+      // Check if ImagePicker is available
+      if (!ImagePicker.launchImageLibraryAsync) {
+        console.error('📁 ImagePicker.launchImageLibraryAsync not available');
+        Alert.alert(
+          'Feature Not Available',
+          'Photo gallery access is not available in this environment. This feature works best on a real device or production build.',
+          [{ text: 'OK' }]
+        );
+        return;
+      }
+      
+      // First check current permission status with error handling
+      let permissionResult;
+      try {
+        permissionResult = await ImagePicker.getMediaLibraryPermissionsAsync();
+        console.log('📁 Current permission status:', permissionResult.status);
+      } catch (permError) {
+        console.error('📁 Error getting permissions:', permError);
+        Alert.alert(
+          'Permission Error',
+          'Unable to check photo library permissions. This might be due to running in Expo Go or web environment.',
+          [{ text: 'OK' }]
+        );
+        return;
+      }
+      
+      let finalStatus = permissionResult.status;
+      
+      if (finalStatus !== 'granted') {
+        console.log('📁 Requesting media library permission...');
+        try {
+          const requestResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+          finalStatus = requestResult.status;
+          console.log('📁 Permission request result:', finalStatus);
+        } catch (permError) {
+          console.error('📁 Error requesting permissions:', permError);
+          Alert.alert(
+            'Permission Error',
+            'Unable to request photo library permissions. Please check your device settings.',
+            [{ text: 'OK' }]
+          );
+          return;
+        }
+      }
+
+      if (finalStatus !== 'granted') {
+        console.log('📁 Permission denied');
+        Alert.alert(
+          'Permission Required',
+          'Photo library access was denied. Please enable it in your device settings to import photos.',
+          [{ text: 'OK' }]
+        );
+        return;
+      }
+
+      console.log('📁 Permission granted, launching image picker...');
+        
+      // Launch image picker with corrected mediaType
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: 'images', // Use string instead of enum to avoid casting issues
+        allowsEditing: false,
+        quality: 1.0,
+        allowsMultipleSelection: false,
+      });
+
+      console.log('📁 Image picker result:', result);
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        const selectedImage = result.assets[0];
+        console.log('📁 Selected image:', selectedImage);
+        
+        // Set the selected image as the current photo
+        if (selectedImage.uri) {
+          setPhoto({
+            uri: selectedImage.uri,
+            width: selectedImage.width || 1080,
+            height: selectedImage.height || 1920
+          });
+          setShowActionModal(true);
+          console.log('📁 Photo set successfully');
+        } else {
+          console.error('📁 No URI in selected image');
+          Alert.alert('Error', 'Selected image is not valid.');
+        }
+      } else {
+        console.log('📁 User cancelled or no image selected');
+      }
+    } catch (error) {
+      console.error('📁 Error importing photo:', error);
+      console.error('📁 Error stack:', error.stack);
+      
+      // Provide more helpful error messages based on common issues
+      let errorMessage = 'Failed to import photo from gallery.';
+      
+      if (error.message.includes('not available') || error.message.includes('undefined')) {
+        errorMessage = 'Photo gallery access is not available in this environment. Try running on a real device.';
+      } else if (error.message.includes('permission')) {
+        errorMessage = 'Permission denied. Please enable photo library access in device settings.';
+      } else if (error.message.includes('cancelled')) {
+        errorMessage = 'Photo selection was cancelled.';
+      }
+      
+      Alert.alert(
+        'Gallery Access Error', 
+        errorMessage + '\n\nWould you like to try a test photo instead?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Use Test Photo', onPress: () => loadTestPhoto() }
+        ]
+      );
+    }
+  };
+
+  // Enhanced MediaLibrary approach (primary gallery access)
+  const importPhotoFromMediaLibrary = async () => {
+    try {
+      console.log('📁 Starting MediaLibrary photo import...');
+      
+      // Request permissions
+      const { status } = await MediaLibrary.requestPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission Required', 'Please grant permission to access your photos in device settings.');
+        return;
+      }
+
+      console.log('📁 MediaLibrary permission granted, fetching photos...');
+
+      // Get recent photos (more than 1 to give options)
+      const album = await MediaLibrary.getAssetsAsync({
+        mediaType: 'photo',
+        first: 20, // Get more photos
+        sortBy: 'creationTime',
+      });
+
+      console.log(`📁 Found ${album.assets.length} photos in gallery`);
+
+      if (album.assets.length > 0) {
+        // For now, use the most recent photo
+        // Later we could add a photo selector UI
+        const asset = album.assets[0];
+        console.log('📁 Using most recent photo:', asset.filename);
+        
+        // Get asset info with local URI
+        const assetInfo = await MediaLibrary.getAssetInfoAsync(asset);
+        console.log('📁 Asset info retrieved:', assetInfo.filename);
+        
+        if (assetInfo.localUri || assetInfo.uri) {
+          const photoUri = assetInfo.localUri || assetInfo.uri;
+          console.log('📁 Using photo URI:', photoUri);
+          
+          setPhoto({
+            uri: photoUri,
+            width: assetInfo.width || 1080,
+            height: assetInfo.height || 1920
+          });
+          setShowActionModal(true);
+          console.log('📁 Photo loaded successfully from MediaLibrary');
+          
+          Alert.alert(
+            'Photo Imported',
+            `Successfully imported: ${assetInfo.filename}`,
+            [{ text: 'OK' }]
+          );
+        } else {
+          console.error('📁 No valid URI found for asset');
+          Alert.alert('Error', 'Could not access the photo file.');
+        }
+      } else {
+        Alert.alert('No Photos', 'No photos found in your gallery. Please take some photos first.');
+      }
+    } catch (error) {
+      console.error('📁 MediaLibrary error:', error);
+      Alert.alert('Gallery Error', `Could not access gallery: ${error.message}`);
+    }
+  };
+
+  // Simple test photo feature (works everywhere)
+  const loadTestPhoto = () => {
+    try {
+      console.log('📁 Loading test photo...');
+      
+      // Use a simple colored rectangle as test image
+      const testImageUri = 'data:image/svg+xml;utf8,<svg width="1080" height="1920" xmlns="http://www.w3.org/2000/svg"><rect width="100%" height="100%" fill="%23ff6b6b"/><text x="540" y="960" font-family="Arial" font-size="80" fill="white" text-anchor="middle">TEST PHOTO</text></svg>';
+      
+      setPhoto({
+        uri: testImageUri,
+        width: 1080,
+        height: 1920
+      });
+      setShowActionModal(true);
+      console.log('📁 Test photo loaded successfully');
+      
+      Alert.alert(
+        'Test Photo Loaded',
+        'Using a test photo for demonstration. Try the MediaLibrary button for real gallery access.',
+        [{ text: 'OK' }]
+      );
+    } catch (error) {
+      console.error('📁 Test photo error:', error);
+      Alert.alert('Error', 'Unable to load test photo.');
+    }
+  };
+
   if (!permission) {
     return <View className="flex-1 justify-center items-center bg-black" />;
   }
@@ -700,16 +919,42 @@ export default function CameraScreen({ navigation }) {
           <Text className="text-white text-opacity-60 text-xs">← Swipe</Text>
         </TouchableOpacity>
         
-        {/* Right swipe indicator - Stories */}
-        <TouchableOpacity 
-          style={styles.rightSwipeIndicator}
-          onPress={() => navigation.navigate('Stories')}
-          activeOpacity={0.7}
-        >
-          <Text className="text-white text-opacity-60 text-sm">📖</Text>
-          <Text className="text-white text-opacity-60 text-xs">Stories</Text>
-          <Text className="text-white text-opacity-60 text-xs">Swipe →</Text>
-        </TouchableOpacity>
+        {/* Right side indicator - Stories & Photo Import */}
+        <View style={styles.rightSwipeIndicator}>
+          <TouchableOpacity 
+            onPress={() => navigation.navigate('Stories')}
+            activeOpacity={0.7}
+            style={{ alignItems: 'center', marginBottom: 6 }}
+          >
+            <Text className="text-white text-opacity-60 text-sm">📖</Text>
+            <Text className="text-white text-opacity-60 text-xs">Stories</Text>
+            <Text className="text-white text-opacity-60 text-xs">Swipe →</Text>
+          </TouchableOpacity>
+          <TouchableOpacity 
+            onPress={importPhotoFromMediaLibrary}
+            activeOpacity={0.7}
+            style={{ alignItems: 'center', marginBottom: 4 }}
+          >
+            <Text className="text-white text-opacity-60 text-sm">📱</Text>
+            <Text className="text-white text-opacity-60 text-xs">Photos</Text>
+          </TouchableOpacity>
+          <TouchableOpacity 
+            onPress={importPhotoFromGallery}
+            activeOpacity={0.7}
+            style={{ alignItems: 'center', marginBottom: 4 }}
+          >
+            <Text className="text-white text-opacity-60 text-sm">📁</Text>
+            <Text className="text-white text-opacity-60 text-xs">Picker</Text>
+          </TouchableOpacity>
+          <TouchableOpacity 
+            onPress={loadTestPhoto}
+            activeOpacity={0.7}
+            style={{ alignItems: 'center' }}
+          >
+            <Text className="text-white text-opacity-60 text-sm">🧪</Text>
+            <Text className="text-white text-opacity-60 text-xs">Test</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Bottom Camera Controls */}
@@ -756,9 +1001,9 @@ export default function CameraScreen({ navigation }) {
         
         <TouchableOpacity
           style={[{ borderRadius: 25, padding: 16 }, { backgroundColor: 'rgba(255, 255, 255, 0.9)' }]}
-          onPress={() => navigation.navigate('Stories')}
+          onPress={importPhotoFromMediaLibrary}
         >
-          <Text style={{ fontSize: 20, fontWeight: 'bold' }}>📖</Text>
+          <Text style={{ fontSize: 20, fontWeight: 'bold' }}>📱</Text>
         </TouchableOpacity>
       </View>
     </View>

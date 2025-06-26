@@ -19,6 +19,8 @@
     "expo-av": "^15.1.6",
     "expo-camera": "^16.1.8",
     "expo-crypto": "^14.1.5",
+    "expo-file-system": "^18.1.10",
+    "expo-image-picker": "~15.0.7",
     "expo-linear-gradient": "~14.1.5",
     "expo-media-library": "^17.1.7",
     "expo-status-bar": "~2.2.3",
