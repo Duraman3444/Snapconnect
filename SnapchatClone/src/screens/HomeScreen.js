@@ -317,6 +317,86 @@ export default function HomeScreen({ navigation }) {
               </Text>
             </View>
           </View>
+
+          {/* Financial Features */}
+          <View style={[{ backgroundColor: '#f0fdf4', borderRadius: 20, padding: 20, marginBottom: 24 }]}>
+            <Text style={[{ fontSize: 18, color: '#059669', fontWeight: 'bold', textAlign: 'center', marginBottom: 8 }]}>
+              💰 Financial Features
+            </Text>
+            <Text style={[{ color: '#065f46', fontSize: 14, textAlign: 'center', marginBottom: 16 }]}>
+              Smart money management for students
+            </Text>
+            <View style={[{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }]}>
+              <TouchableOpacity
+                style={[{ backgroundColor: 'white', borderRadius: 16, padding: 12, borderWidth: 1, borderColor: '#10b981', flex: 1, minWidth: '45%', alignItems: 'center' }]}
+                onPress={() => navigation.navigate('TextbookExchange')}
+              >
+                <Text style={[{ fontSize: 20, marginBottom: 4 }]}>📚</Text>
+                <Text style={[{ color: '#059669', fontWeight: '600', fontSize: 12, textAlign: 'center' }]}>Textbook Exchange</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[{ backgroundColor: 'white', borderRadius: 16, padding: 12, borderWidth: 1, borderColor: '#10b981', flex: 1, minWidth: '45%', alignItems: 'center' }]}
+                onPress={() => navigation.navigate('SplitBillCalculator')}
+              >
+                <Text style={[{ fontSize: 20, marginBottom: 4 }]}>🧮</Text>
+                <Text style={[{ color: '#059669', fontWeight: '600', fontSize: 12, textAlign: 'center' }]}>Split Bills</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[{ backgroundColor: 'white', borderRadius: 16, padding: 12, borderWidth: 1, borderColor: '#10b981', flex: 1, minWidth: '45%', alignItems: 'center' }]}
+                onPress={() => navigation.navigate('CampusJobBoard')}
+              >
+                <Text style={[{ fontSize: 20, marginBottom: 4 }]}>💼</Text>
+                <Text style={[{ color: '#059669', fontWeight: '600', fontSize: 12, textAlign: 'center' }]}>Job Board</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[{ backgroundColor: 'white', borderRadius: 16, padding: 12, borderWidth: 1, borderColor: '#10b981', flex: 1, minWidth: '45%', alignItems: 'center' }]}
+                onPress={() => navigation.navigate('ScholarshipAlerts')}
+              >
+                <Text style={[{ fontSize: 20, marginBottom: 4 }]}>🎓</Text>
+                <Text style={[{ color: '#059669', fontWeight: '600', fontSize: 12, textAlign: 'center' }]}>Scholarships</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          {/* Professional Development */}
+          <View style={[{ backgroundColor: '#fdf4ff', borderRadius: 20, padding: 20, marginBottom: 24 }]}>
+            <Text style={[{ fontSize: 18, color: '#9333ea', fontWeight: 'bold', textAlign: 'center', marginBottom: 8 }]}>
+              💼 Professional Development
+            </Text>
+            <Text style={[{ color: '#7c2d92', fontSize: 14, textAlign: 'center', marginBottom: 16 }]}>
+              Build your career from campus
+            </Text>
+            <View style={[{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }]}>
+              <TouchableOpacity
+                style={[{ backgroundColor: 'white', borderRadius: 16, padding: 12, borderWidth: 1, borderColor: '#a855f7', flex: 1, minWidth: '45%', alignItems: 'center' }]}
+                onPress={() => navigation.navigate('CareerFairNetworking')}
+              >
+                <Text style={[{ fontSize: 20, marginBottom: 4 }]}>🤝</Text>
+                <Text style={[{ color: '#9333ea', fontWeight: '600', fontSize: 12, textAlign: 'center' }]}>Career Fair</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[{ backgroundColor: 'white', borderRadius: 16, padding: 12, borderWidth: 1, borderColor: '#a855f7', flex: 1, minWidth: '45%', alignItems: 'center' }]}
+                onPress={() => navigation.navigate('InternshipSharing')}
+              >
+                <Text style={[{ fontSize: 20, marginBottom: 4 }]}>📈</Text>
+                <Text style={[{ color: '#9333ea', fontWeight: '600', fontSize: 12, textAlign: 'center' }]}>Internships</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[{ backgroundColor: 'white', borderRadius: 16, padding: 12, borderWidth: 1, borderColor: '#a855f7', flex: 1, minWidth: '45%', alignItems: 'center' }]}
+                onPress={() => navigation.navigate('LinkedInIntegration')}
+              >
+                <Text style={[{ fontSize: 20, marginBottom: 4 }]}>💼</Text>
+                <Text style={[{ color: '#9333ea', fontWeight: '600', fontSize: 12, textAlign: 'center' }]}>LinkedIn</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[{ backgroundColor: 'white', borderRadius: 16, padding: 12, borderWidth: 1, borderColor: '#a855f7', flex: 1, minWidth: '45%', alignItems: 'center' }]}
+                onPress={() => navigation.navigate('SkillsShowcase')}
+              >
+                <Text style={[{ fontSize: 20, marginBottom: 4 }]}>🏆</Text>
+                <Text style={[{ color: '#9333ea', fontWeight: '600', fontSize: 12, textAlign: 'center' }]}>Skills</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
         </ScrollView>
       ) : (
         <FlatList

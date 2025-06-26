@@ -34,6 +34,18 @@ import LostAndFoundScreen from './src/screens/LostAndFoundScreen';
 // Mental Health & Wellness
 import MentalHealthScreen from './src/screens/MentalHealthScreen';
 
+// Financial Features
+import TextbookExchangeScreen from './src/screens/TextbookExchangeScreen';
+import SplitBillCalculatorScreen from './src/screens/SplitBillCalculatorScreen';
+import CampusJobBoardScreen from './src/screens/CampusJobBoardScreen';
+import ScholarshipAlertsScreen from './src/screens/ScholarshipAlertsScreen';
+
+// Professional Development
+import CareerFairNetworkingScreen from './src/screens/CareerFairNetworkingScreen';
+import InternshipSharingScreen from './src/screens/InternshipSharingScreen';
+import LinkedInIntegrationScreen from './src/screens/LinkedInIntegrationScreen';
+import SkillsShowcaseScreen from './src/screens/SkillsShowcaseScreen';
+
 // Import debug components
 import DebugAccountSwitcher from './src/components/DebugAccountSwitcher';
 
@@ -148,6 +160,18 @@ function AppNavigator() {
             
             {/* Mental Health & Wellness */}
             <Stack.Screen name="MentalHealth" component={MentalHealthScreen} />
+            
+            {/* Financial Features */}
+            <Stack.Screen name="TextbookExchange" component={TextbookExchangeScreen} />
+            <Stack.Screen name="SplitBillCalculator" component={SplitBillCalculatorScreen} />
+            <Stack.Screen name="CampusJobBoard" component={CampusJobBoardScreen} />
+            <Stack.Screen name="ScholarshipAlerts" component={ScholarshipAlertsScreen} />
+            
+            {/* Professional Development */}
+            <Stack.Screen name="CareerFairNetworking" component={CareerFairNetworkingScreen} />
+            <Stack.Screen name="InternshipSharing" component={InternshipSharingScreen} />
+            <Stack.Screen name="LinkedInIntegration" component={LinkedInIntegrationScreen} />
+            <Stack.Screen name="SkillsShowcase" component={SkillsShowcaseScreen} />
           </>
         ) : (
           // Authentication screens
