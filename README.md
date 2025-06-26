@@ -88,7 +88,7 @@ An AI-powered social platform specifically designed for college students to buil
 - npm or yarn
 - Expo CLI
 - iOS Simulator or Android Emulator (for testing)
-- Firebase account (for production deployment)
+- Supabase account (for production deployment)
 
 ### Installation
 
