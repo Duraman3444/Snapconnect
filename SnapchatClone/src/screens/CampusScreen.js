@@ -1,20 +1,66 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, RefreshControl, Alert } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, RefreshControl, Alert, ActivityIndicator } from 'react-native';
 import { useAuth } from '../context/SupabaseAuthContext';
 import { useTheme } from '../context/ThemeContext';
+import ragService from '../services/ragService';
+import userProfileService from '../services/userProfileService';
 
 export default function CampusScreen({ navigation }) {
   const [diningHalls, setDiningHalls] = useState([]);
   const [libraries, setLibraries] = useState([]);
   const [campusEvents, setCampusEvents] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState('dining'); // dining, libraries, events
+  const [activeTab, setActiveTab] = useState('dining'); // dining, libraries, events, ai_recommendations
+  const [aiRecommendations, setAiRecommendations] = useState(null);
+  const [loadingAI, setLoadingAI] = useState(false);
   const { currentUser, supabase } = useAuth();
   const { currentTheme } = useTheme();
 
   useEffect(() => {
     loadCampusData();
   }, [currentUser]);
+
+  // Load AI recommendations when switching to AI tab
+  useEffect(() => {
+    if (activeTab === 'ai_recommendations' && !aiRecommendations) {
+      loadAIDiningRecommendations();
+    }
+  }, [activeTab]);
+
+  const loadAIDiningRecommendations = async () => {
+    if (!currentUser?.id) return;
+
+    setLoadingAI(true);
+    try {
+      const userProfile = await userProfileService.getMockUserProfile(currentUser.id);
+      const currentHour = new Date().getHours();
+      let timeOfDay = 'breakfast';
+      if (currentHour >= 11 && currentHour < 15) timeOfDay = 'lunch';
+      else if (currentHour >= 15 && currentHour < 21) timeOfDay = 'dinner';
+      else if (currentHour >= 21) timeOfDay = 'late_night';
+
+      const recommendations = await ragService.generateDiningRecommendations(
+        userProfile.diningPreferences,
+        timeOfDay,
+        userProfile.diningPreferences.dietaryRestrictions
+      );
+
+      setAiRecommendations(recommendations);
+
+      // Track AI usage
+      await userProfileService.trackActivity(currentUser.id, {
+        type: 'ai_dining_recommendations',
+        timeOfDay: timeOfDay,
+        success: recommendations !== null
+      });
+
+    } catch (error) {
+      console.error('Error loading AI dining recommendations:', error);
+      Alert.alert('AI Error', 'Unable to load personalized dining recommendations at this time.');
+    } finally {
+      setLoadingAI(false);
+    }
+  };
 
   const loadCampusData = async () => {
     try {
@@ -484,6 +530,116 @@ export default function CampusScreen({ navigation }) {
     </View>
   );
 
+  // Render AI Recommendations Tab
+  const renderAIRecommendations = () => (
+    <ScrollView style={{ padding: 20 }} refreshControl={
+      <RefreshControl refreshing={loadingAI} onRefresh={loadAIDiningRecommendations} />
+    }>
+      <View style={{ marginBottom: 24 }}>
+        <Text style={{ fontSize: 24, fontWeight: 'bold', color: currentTheme.primary, marginBottom: 8 }}>
+          🤖 Smart Campus Assistant
+        </Text>
+        <Text style={{ color: currentTheme.textSecondary, fontSize: 16, lineHeight: 24 }}>
+          Get personalized recommendations for dining, studying, and campus activities.
+        </Text>
+      </View>
+
+      {loadingAI ? (
+        <View style={{ alignItems: 'center', justifyContent: 'center', paddingVertical: 40 }}>
+          <ActivityIndicator size="large" color={currentTheme.primary} />
+          <Text style={{ color: currentTheme.textSecondary, marginTop: 16, textAlign: 'center' }}>
+            Analyzing your preferences and campus availability...
+          </Text>
+        </View>
+      ) : aiRecommendations ? (
+        <View>
+          {/* Dining Recommendations */}
+          {aiRecommendations.recommendations?.length > 0 && (
+            <View style={{ backgroundColor: currentTheme.surface, borderRadius: 16, padding: 20, marginBottom: 16 }}>
+              <Text style={{ fontSize: 18, fontWeight: 'bold', color: currentTheme.primary, marginBottom: 12 }}>
+                🍽️ Personalized Dining Recommendations
+              </Text>
+              {aiRecommendations.recommendations.map((rec, index) => (
+                <View key={index} style={{ marginBottom: 16, paddingBottom: 16, borderBottomWidth: index < aiRecommendations.recommendations.length - 1 ? 1 : 0, borderBottomColor: currentTheme.border }}>
+                  <Text style={{ fontSize: 16, fontWeight: 'bold', color: currentTheme.text, marginBottom: 4 }}>
+                    📍 {rec.location}
+                  </Text>
+                  <Text style={{ color: currentTheme.text, marginBottom: 4 }}>
+                    <Text style={{ fontWeight: 'bold' }}>Recommended: </Text>
+                    {rec.meal}
+                  </Text>
+                  <Text style={{ color: currentTheme.textSecondary, fontSize: 14, marginBottom: 4 }}>
+                    💡 {rec.why}
+                  </Text>
+                  {rec.nutritionTip && (
+                    <Text style={{ color: '#10b981', fontSize: 14, marginBottom: 4 }}>
+                      🍃 {rec.nutritionTip}
+                    </Text>
+                  )}
+                  {rec.budgetNote && (
+                    <Text style={{ color: '#6366f1', fontSize: 14 }}>
+                      💰 {rec.budgetNote}
+                    </Text>
+                  )}
+                </View>
+              ))}
+            </View>
+          )}
+
+          {/* Alternative Options */}
+          {aiRecommendations.alternatives?.length > 0 && (
+            <View style={{ backgroundColor: currentTheme.surface, borderRadius: 16, padding: 20, marginBottom: 16 }}>
+              <Text style={{ fontSize: 18, fontWeight: 'bold', color: currentTheme.primary, marginBottom: 12 }}>
+                🔄 Alternative Options
+              </Text>
+              {aiRecommendations.alternatives.map((alt, index) => (
+                <Text key={index} style={{ color: currentTheme.text, marginBottom: 4 }}>
+                  • {alt}
+                </Text>
+              ))}
+            </View>
+          )}
+
+          {/* Health Tip */}
+          {aiRecommendations.healthTip && (
+            <View style={{ backgroundColor: '#f0fdf4', borderRadius: 16, padding: 20, marginBottom: 16, borderWidth: 1, borderColor: '#10b981' }}>
+              <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#166534', marginBottom: 8 }}>
+                🍃 Daily Health Tip
+              </Text>
+              <Text style={{ color: '#166534', lineHeight: 20 }}>
+                {aiRecommendations.healthTip}
+              </Text>
+            </View>
+          )}
+
+          <TouchableOpacity
+            style={{ backgroundColor: currentTheme.primary, borderRadius: 12, padding: 16, alignItems: 'center' }}
+            onPress={() => setActiveTab('dining')}
+          >
+            <Text style={{ color: currentTheme.background, fontSize: 16, fontWeight: 'bold' }}>
+              View Dining Halls
+            </Text>
+          </TouchableOpacity>
+        </View>
+      ) : (
+        <View style={{ alignItems: 'center', paddingVertical: 40 }}>
+          <Text style={{ fontSize: 48, marginBottom: 16 }}>🤖</Text>
+          <Text style={{ color: currentTheme.textSecondary, textAlign: 'center', marginBottom: 20 }}>
+            No recommendations loaded yet.
+          </Text>
+          <TouchableOpacity
+            style={{ backgroundColor: currentTheme.primary, borderRadius: 12, paddingHorizontal: 24, paddingVertical: 12 }}
+            onPress={loadAIDiningRecommendations}
+          >
+            <Text style={{ color: currentTheme.background, fontWeight: 'bold' }}>
+              Get Smart Recommendations
+            </Text>
+          </TouchableOpacity>
+        </View>
+      )}
+    </ScrollView>
+  );
+
   const renderTabContent = () => {
     switch (activeTab) {
       case 'dining':
@@ -492,6 +648,8 @@ export default function CampusScreen({ navigation }) {
         return renderLibraries();
       case 'events':
         return renderCampusEvents();
+      case 'ai_recommendations':
+        return renderAIRecommendations();
       default:
         return renderDiningHalls();
     }
@@ -523,7 +681,8 @@ export default function CampusScreen({ navigation }) {
           {[
             { key: 'dining', label: '🍽️ Dining', icon: '🍽️' },
             { key: 'libraries', label: '📚 Libraries', icon: '📚' },
-            { key: 'events', label: '🎉 Events', icon: '🎉' }
+            { key: 'events', label: '🎉 Events', icon: '🎉' },
+            { key: 'ai_recommendations', label: '�� AI Recommendations', icon: '🤖' }
           ].map((tab) => (
             <TouchableOpacity
               key={tab.key}

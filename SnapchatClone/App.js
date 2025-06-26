@@ -50,6 +50,9 @@ import SkillsShowcaseScreen from './src/screens/SkillsShowcaseScreen';
 import GamificationScreen from './src/screens/GamificationScreen';
 import SeasonalFeaturesScreen from './src/screens/SeasonalFeaturesScreen';
 
+// RAG AI Features
+import RAGHomeScreen from './src/screens/RAGHomeScreen';
+
 // Import debug components
 import DebugAccountSwitcher from './src/components/DebugAccountSwitcher';
 
@@ -180,6 +183,9 @@ function AppNavigator() {
             {/* Gamification and Seasonal Features */}
             <Stack.Screen name="Gamification" component={GamificationScreen} />
             <Stack.Screen name="SeasonalFeatures" component={SeasonalFeaturesScreen} />
+            
+            {/* RAG AI Features */}
+            <Stack.Screen name="RAGHome" component={RAGHomeScreen} />
           </>
         ) : (
           // Authentication screens

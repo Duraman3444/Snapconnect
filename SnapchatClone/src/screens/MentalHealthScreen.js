@@ -1,25 +1,23 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, FlatList, Alert, TextInput, Modal, ScrollView } from 'react-native';
+import { View, Text, TouchableOpacity, FlatList, Alert, TextInput, Modal, ScrollView, ActivityIndicator } from 'react-native';
 import { useAuth } from '../context/SupabaseAuthContext';
 import { useTheme } from '../context/ThemeContext';
+import ragService from '../services/ragService';
+import userProfileService from '../services/userProfileService';
 
 export default function MentalHealthScreen({ navigation }) {
   const { currentUser, supabase } = useAuth();
   const { currentTheme } = useTheme();
-  const [stressLevel, setStressLevel] = useState(3);
+  const [stressLevel, setStressLevel] = useState(5);
   const [challenges, setChallenges] = useState([]);
   const [supportGroups, setSupportGroups] = useState([]);
-  const [showMoodModal, setShowMoodModal] = useState(false);
-  const [showBreakModal, setShowBreakModal] = useState(false);
-  const [todaysMood, setTodaysMood] = useState(null);
+  const [showMoodTracker, setShowMoodTracker] = useState(false);
+  const [selectedMood, setSelectedMood] = useState(null);
+  const [aiRecommendations, setAiRecommendations] = useState(null);
+  const [loadingAI, setLoadingAI] = useState(false);
+  const [moodHistory, setMoodHistory] = useState([]);
 
-  const stressLevels = [
-    { level: 1, emoji: '😌', label: 'Very Calm' },
-    { level: 2, emoji: '🙂', label: 'Relaxed' },
-    { level: 3, emoji: '😐', label: 'Neutral' },
-    { level: 4, emoji: '😟', label: 'Stressed' },
-    { level: 5, emoji: '😰', label: 'Very Stressed' }
-  ];
+  const stressLevels = Array.from({ length: 10 }, (_, i) => i + 1);
 
   const wellnessChallenges = [
     {
@@ -97,7 +95,10 @@ export default function MentalHealthScreen({ navigation }) {
 
   useEffect(() => {
     loadTodaysMood();
-  }, []);
+    if (currentUser) {
+      loadMoodHistory();
+    }
+  }, [currentUser]);
 
   const loadTodaysMood = async () => {
     try {
@@ -110,7 +111,6 @@ export default function MentalHealthScreen({ navigation }) {
         .single();
 
       if (data) {
-        setTodaysMood(data);
         setStressLevel(data.stress_level);
       }
     } catch (error) {
@@ -118,57 +118,109 @@ export default function MentalHealthScreen({ navigation }) {
     }
   };
 
-  const logMood = async () => {
+  const loadMoodHistory = async () => {
     try {
-      const today = new Date().toISOString().split('T')[0];
-      
-      if (todaysMood) {
-        // Update existing mood
-        const { error } = await supabase
-          .from('mood_logs')
-          .update({ stress_level: stressLevel })
-          .eq('id', todaysMood.id);
+      // Mock mood history for demonstration
+      setMoodHistory([
+        { mood: 'good', stress: 4, date: '2024-01-15', ai_used: true },
+        { mood: 'okay', stress: 6, date: '2024-01-14', ai_used: false },
+        { mood: 'great', stress: 3, date: '2024-01-13', ai_used: true }
+      ]);
+    } catch (error) {
+      console.error('Error loading mood history:', error);
+    }
+  };
 
-        if (error) throw error;
-      } else {
-        // Create new mood log
-        const { data, error } = await supabase
-          .from('mood_logs')
-          .insert({
-            user_id: currentUser.id,
-            date: today,
-            stress_level: stressLevel
-          })
-          .select()
-          .single();
+  const generateAIWellnessRecommendations = async () => {
+    if (!selectedMood) {
+      Alert.alert('Mood Required', 'Please select your current mood first.');
+      return;
+    }
 
-        if (error) throw error;
-        setTodaysMood(data);
-      }
+    setLoadingAI(true);
+    try {
+      const userProfile = await userProfileService.getMockUserProfile(currentUser.id);
+      const contextualData = await userProfileService.getContextualUserData(currentUser.id, 'wellness');
 
-      setShowMoodModal(false);
-      Alert.alert('Thank you!', 'Your mood has been logged. Take care of yourself! 💙');
+      const moodData = {
+        current: selectedMood,
+        stressors: ['academic pressure', 'social challenges', 'time management']
+      };
+
+      const recommendations = await ragService.generateWellnessRecommendations(
+        moodData,
+        stressLevel,
+        'high' // Could be dynamic based on academic calendar
+      );
+
+      setAiRecommendations(recommendations);
+
+      // Track AI usage
+      await userProfileService.trackActivity(currentUser.id, {
+        type: 'ai_wellness_recommendations',
+        mood: selectedMood,
+        stressLevel: stressLevel,
+        success: recommendations !== null
+      });
+
+      Alert.alert(
+        '🤖 AI Wellness Coach',
+        'Personalized wellness recommendations generated based on your current mood and stress level.',
+        [{ text: 'View Recommendations' }]
+      );
+
+    } catch (error) {
+      console.error('Error generating wellness recommendations:', error);
+      Alert.alert('AI Error', 'Unable to generate personalized recommendations at this time.');
+    } finally {
+      setLoadingAI(false);
+    }
+  };
+
+  const logMood = async () => {
+    if (!selectedMood) {
+      Alert.alert('Error', 'Please select your mood first');
+      return;
+    }
+
+    try {
+      const moodEntry = {
+        mood: selectedMood,
+        stress: stressLevel,
+        date: new Date().toISOString().split('T')[0],
+        ai_used: aiRecommendations !== null
+      };
+
+      // Track mood entry
+      await userProfileService.trackActivity(currentUser.id, {
+        type: 'mood_entry',
+        mood: selectedMood,
+        stressLevel: stressLevel
+      });
+
+      setMoodHistory(prev => [moodEntry, ...prev.slice(0, 9)]); // Keep last 10 entries
+      setShowMoodTracker(false);
+      setSelectedMood(null);
+      setStressLevel(5);
+      setAiRecommendations(null);
+
+      Alert.alert(
+        'Mood Logged! 📝',
+        aiRecommendations ? 'Your mood has been logged with AI wellness recommendations.' : 'Your mood has been logged successfully.'
+      );
     } catch (error) {
       Alert.alert('Error', 'Failed to log mood');
     }
   };
 
-  const suggestBreak = () => {
-    const breakSuggestions = [
-      '🚶‍♀️ Take a 10-minute walk outside',
-      '🧘‍♂️ Try a 5-minute breathing exercise',
-      '💧 Drink a glass of water and stretch',
-      '🎵 Listen to your favorite song',
-      '🌱 Step outside and get some fresh air',
-      '📱 Call a friend or family member',
-      '☕ Make yourself a warm beverage',
-      '📖 Read a few pages of a book',
-      '🎨 Doodle or do something creative',
-      '😺 Watch funny videos for 5 minutes'
-    ];
-    
-    const randomSuggestion = breakSuggestions[Math.floor(Math.random() * breakSuggestions.length)];
-    Alert.alert('Study Break Suggestion 🌟', randomSuggestion);
+  const getMoodColor = (mood) => {
+    const moodObj = moods.find(m => m.value === mood);
+    return moodObj ? moodObj.color : currentTheme.textSecondary;
+  };
+
+  const getMoodEmoji = (mood) => {
+    const moodObj = moods.find(m => m.value === mood);
+    return moodObj ? moodObj.emoji : '😐';
   };
 
   const renderChallenge = ({ item }) => (
@@ -253,197 +305,393 @@ export default function MentalHealthScreen({ navigation }) {
     </View>
   );
 
+  const renderWellnessResources = () => (
+    <ScrollView style={{ padding: 20 }}>
+      <Text style={{ fontSize: 24, fontWeight: 'bold', color: currentTheme.primary, marginBottom: 20, textAlign: 'center' }}>
+        🧠 Mental Health Resources
+      </Text>
+
+      {/* Emergency Resources */}
+      <View style={{ backgroundColor: '#fef2f2', borderRadius: 16, padding: 20, marginBottom: 20, borderWidth: 1, borderColor: '#fecaca' }}>
+        <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#dc2626', marginBottom: 12 }}>
+          🚨 Crisis Resources
+        </Text>
+        <Text style={{ color: '#7f1d1d', marginBottom: 8, lineHeight: 20 }}>
+          If you're experiencing a mental health crisis, please reach out immediately:
+        </Text>
+        <TouchableOpacity style={{ backgroundColor: '#dc2626', borderRadius: 8, padding: 12, marginBottom: 8 }}>
+          <Text style={{ color: 'white', textAlign: 'center', fontWeight: 'bold' }}>
+            📞 Crisis Hotline: 988
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={{ backgroundColor: '#7f1d1d', borderRadius: 8, padding: 12 }}>
+          <Text style={{ color: 'white', textAlign: 'center', fontWeight: 'bold' }}>
+            🏥 Campus Emergency: 911
+          </Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Campus Resources */}
+      <View style={{ backgroundColor: currentTheme.surface, borderRadius: 16, padding: 20, marginBottom: 20 }}>
+        <Text style={{ fontSize: 18, fontWeight: 'bold', color: currentTheme.primary, marginBottom: 12 }}>
+          🏫 Campus Support Services
+        </Text>
+        {[
+          { name: 'Counseling Center', hours: 'Mon-Fri 8AM-5PM', phone: '(555) 123-4567' },
+          { name: 'Student Health Services', hours: '24/7 Nurse Line', phone: '(555) 123-4568' },
+          { name: 'Academic Success Center', hours: 'Mon-Fri 9AM-6PM', phone: '(555) 123-4569' },
+          { name: 'Peer Support Groups', hours: 'Various Times', phone: '(555) 123-4570' }
+        ].map((resource, index) => (
+          <TouchableOpacity key={index} style={{
+            backgroundColor: currentTheme.background,
+            borderRadius: 12,
+            padding: 16,
+            marginBottom: 12,
+            borderWidth: 1,
+            borderColor: currentTheme.border
+          }}>
+            <Text style={{ fontSize: 16, fontWeight: 'bold', color: currentTheme.text, marginBottom: 4 }}>
+              {resource.name}
+            </Text>
+            <Text style={{ color: currentTheme.textSecondary, fontSize: 14, marginBottom: 4 }}>
+              🕒 {resource.hours}
+            </Text>
+            <Text style={{ color: currentTheme.primary, fontSize: 14 }}>
+              📞 {resource.phone}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+
+      {/* Self-Care Tips */}
+      <View style={{ backgroundColor: currentTheme.surface, borderRadius: 16, padding: 20, marginBottom: 20 }}>
+        <Text style={{ fontSize: 18, fontWeight: 'bold', color: currentTheme.primary, marginBottom: 12 }}>
+          🌟 Daily Self-Care Tips
+        </Text>
+        {[
+          '🧘‍♀️ Practice 5 minutes of deep breathing',
+          '🚶‍♂️ Take a 10-minute walk outdoors',
+          '💧 Stay hydrated - aim for 8 glasses of water',
+          '😴 Maintain consistent sleep schedule',
+          '📱 Limit social media before bedtime',
+          '🤝 Connect with a friend or family member',
+          '📝 Write down 3 things you\'re grateful for',
+          '🎵 Listen to calming music or nature sounds'
+        ].map((tip, index) => (
+          <Text key={index} style={{ color: currentTheme.text, marginBottom: 8, fontSize: 16 }}>
+            {tip}
+          </Text>
+        ))}
+      </View>
+
+      {/* Coping Strategies */}
+      <View style={{ backgroundColor: currentTheme.surface, borderRadius: 16, padding: 20 }}>
+        <Text style={{ fontSize: 18, fontWeight: 'bold', color: currentTheme.primary, marginBottom: 12 }}>
+          🛠️ Coping Strategies
+        </Text>
+        <Text style={{ color: currentTheme.text, marginBottom: 12, lineHeight: 20 }}>
+          When feeling overwhelmed, try these evidence-based techniques:
+        </Text>
+        {[
+          '🔢 5-4-3-2-1 Grounding: Name 5 things you see, 4 you can touch, 3 you hear, 2 you smell, 1 you taste',
+          '🌬️ Box Breathing: Inhale for 4, hold for 4, exhale for 4, hold for 4',
+          '💭 Challenge negative thoughts: Ask "Is this thought helpful? Is it realistic?"',
+          '⏰ Break tasks into smaller, manageable steps',
+          '🎯 Focus on what you can control, let go of what you can\'t'
+        ].map((strategy, index) => (
+          <Text key={index} style={{ color: currentTheme.text, marginBottom: 12, fontSize: 14, lineHeight: 20 }}>
+            {strategy}
+          </Text>
+        ))}
+      </View>
+    </ScrollView>
+  );
+
   return (
-    <View style={[{ flex: 1, backgroundColor: currentTheme.background }]}>
+    <View style={{ flex: 1, backgroundColor: currentTheme.background }}>
       {/* Header */}
-      <View style={[{ 
+      <View style={{ 
         backgroundColor: currentTheme.surface, 
         paddingTop: 56, 
         paddingBottom: 24, 
         paddingHorizontal: 24,
         borderBottomWidth: 1,
         borderBottomColor: currentTheme.border
-      }]}>
-        <View style={[{ flexDirection: 'row', alignItems: 'center', marginBottom: 16 }]}>
+      }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 16 }}>
           <TouchableOpacity onPress={() => navigation.goBack()}>
-            <Text style={[{ color: currentTheme.primary, fontSize: 18, fontWeight: '600' }]}>← Back</Text>
+            <Text style={{ color: currentTheme.primary, fontSize: 18, fontWeight: '600' }}>← Back</Text>
           </TouchableOpacity>
         </View>
-        <Text style={[{ fontSize: 28, fontWeight: 'bold', color: currentTheme.primary, textAlign: 'center' }]}>
+        <Text style={{ fontSize: 28, fontWeight: 'bold', color: currentTheme.primary, textAlign: 'center' }}>
           🧠 Mental Wellness
         </Text>
-        <Text style={[{ color: currentTheme.textSecondary, textAlign: 'center', marginTop: 8 }]}>
-          Your mental health matters
+        <Text style={{ color: currentTheme.textSecondary, textAlign: 'center', marginTop: 8 }}>
+          AI-powered wellness support for college students
         </Text>
       </View>
 
-      <ScrollView style={[{ flex: 1 }]} contentContainerStyle={{ paddingBottom: 100 }}>
-        {/* Quick Actions */}
-        <View style={[{ padding: 16 }]}>
-          <Text style={[{ fontSize: 20, fontWeight: 'bold', color: currentTheme.primary, marginBottom: 16 }]}>
-            Quick Actions
-          </Text>
-          
-          <View style={[{ flexDirection: 'row', gap: 12, marginBottom: 24 }]}>
-            <TouchableOpacity
-              style={[{ backgroundColor: '#dbeafe', borderRadius: 16, padding: 16, flex: 1 }]}
-              onPress={() => setShowMoodModal(true)}
-            >
-              <Text style={[{ fontSize: 24, textAlign: 'center', marginBottom: 8 }]}>😊</Text>
-              <Text style={[{ color: '#1e40af', fontWeight: 'bold', textAlign: 'center' }]}>
-                Log Mood
-              </Text>
-            </TouchableOpacity>
+      <ScrollView style={{ flex: 1 }}>
+        {/* Mood Tracker Section */}
+        <View style={{ padding: 20 }}>
+          <View style={{ backgroundColor: currentTheme.surface, borderRadius: 16, padding: 20, marginBottom: 20 }}>
+            <Text style={{ fontSize: 20, fontWeight: 'bold', color: currentTheme.primary, marginBottom: 16, textAlign: 'center' }}>
+              📊 Daily Mood Check-in
+            </Text>
             
             <TouchableOpacity
-              style={[{ backgroundColor: '#dcfce7', borderRadius: 16, padding: 16, flex: 1 }]}
-              onPress={suggestBreak}
+              style={{ backgroundColor: currentTheme.primary, borderRadius: 12, padding: 16, alignItems: 'center', marginBottom: 16 }}
+              onPress={() => setShowMoodTracker(true)}
             >
-              <Text style={[{ fontSize: 24, textAlign: 'center', marginBottom: 8 }]}>☕</Text>
-              <Text style={[{ color: '#166534', fontWeight: 'bold', textAlign: 'center' }]}>
-                Take Break
+              <Text style={{ color: currentTheme.background, fontSize: 16, fontWeight: 'bold' }}>
+                ✍️ Log Today's Mood
               </Text>
             </TouchableOpacity>
+
+            {/* Recent Mood History */}
+            {moodHistory.length > 0 && (
+              <View>
+                <Text style={{ fontSize: 16, fontWeight: 'bold', color: currentTheme.text, marginBottom: 12 }}>
+                  Recent Check-ins:
+                </Text>
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                  {moodHistory.slice(0, 5).map((entry, index) => (
+                    <View key={index} style={{
+                      backgroundColor: currentTheme.background,
+                      borderRadius: 20,
+                      paddingHorizontal: 12,
+                      paddingVertical: 8,
+                      borderWidth: 1,
+                      borderColor: getMoodColor(entry.mood),
+                      flexDirection: 'row',
+                      alignItems: 'center'
+                    }}>
+                      <Text style={{ fontSize: 16, marginRight: 4 }}>
+                        {getMoodEmoji(entry.mood)}
+                      </Text>
+                      <Text style={{ color: currentTheme.textSecondary, fontSize: 12 }}>
+                        {new Date(entry.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                      </Text>
+                      {entry.ai_used && (
+                        <Text style={{ fontSize: 12, marginLeft: 4 }}>🤖</Text>
+                      )}
+                    </View>
+                  ))}
+                </View>
+              </View>
+            )}
           </View>
 
-          {/* Today's Mood */}
-          {todaysMood && (
-            <View style={[{ backgroundColor: '#f0f9ff', borderRadius: 16, padding: 16, marginBottom: 24 }]}>
-              <Text style={[{ fontSize: 16, fontWeight: 'bold', color: '#0369a1', marginBottom: 8 }]}>
-                Today's Mood Check-in
+          {/* AI Wellness Recommendations */}
+          {aiRecommendations && (
+            <View style={{ backgroundColor: '#f0f9ff', borderRadius: 16, padding: 20, marginBottom: 20, borderWidth: 1, borderColor: '#0ea5e9' }}>
+              <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#0c4a6e', marginBottom: 12 }}>
+                🤖 Personalized Wellness Recommendations
               </Text>
-              <View style={[{ flexDirection: 'row', alignItems: 'center' }]}>
-                <Text style={[{ fontSize: 32, marginRight: 12 }]}>
-                  {stressLevels.find(s => s.level === todaysMood.stress_level)?.emoji}
-                </Text>
-                <Text style={[{ color: '#0369a1', fontSize: 16 }]}>
-                  {stressLevels.find(s => s.level === todaysMood.stress_level)?.label}
-                </Text>
-              </View>
+
+              {/* Immediate Actions */}
+              {aiRecommendations.immediate && (
+                <View style={{ marginBottom: 16 }}>
+                  <Text style={{ fontWeight: 'bold', color: '#0c4a6e', marginBottom: 8 }}>
+                    Right Now:
+                  </Text>
+                  {aiRecommendations.immediate.activities?.map((activity, index) => (
+                    <Text key={index} style={{ color: '#075985', marginBottom: 4, marginLeft: 8 }}>
+                      • {activity}
+                    </Text>
+                  ))}
+                  {aiRecommendations.immediate.breathing && (
+                    <View style={{ backgroundColor: '#e0f2fe', borderRadius: 8, padding: 12, marginTop: 8 }}>
+                      <Text style={{ color: '#0c4a6e', fontWeight: 'bold', marginBottom: 4 }}>
+                        🌬️ Breathing Exercise:
+                      </Text>
+                      <Text style={{ color: '#075985' }}>
+                        {aiRecommendations.immediate.breathing}
+                      </Text>
+                    </View>
+                  )}
+                  {aiRecommendations.immediate.affirmation && (
+                    <View style={{ backgroundColor: '#fef3c7', borderRadius: 8, padding: 12, marginTop: 8 }}>
+                      <Text style={{ color: '#92400e', fontWeight: 'bold', marginBottom: 4 }}>
+                        💫 Daily Affirmation:
+                      </Text>
+                      <Text style={{ color: '#92400e', fontStyle: 'italic' }}>
+                        "{aiRecommendations.immediate.affirmation}"
+                      </Text>
+                    </View>
+                  )}
+                </View>
+              )}
+
+              {/* Daily Habits */}
+              {aiRecommendations.daily && (
+                <View style={{ marginBottom: 16 }}>
+                  <Text style={{ fontWeight: 'bold', color: '#0c4a6e', marginBottom: 8 }}>
+                    Daily Habits to Build:
+                  </Text>
+                  {aiRecommendations.daily.habits?.map((habit, index) => (
+                    <Text key={index} style={{ color: '#075985', marginBottom: 4, marginLeft: 8 }}>
+                      • {habit}
+                    </Text>
+                  ))}
+                </View>
+              )}
+
+              {/* Resources */}
+              {aiRecommendations.resources && (
+                <View>
+                  <Text style={{ fontWeight: 'bold', color: '#0c4a6e', marginBottom: 8 }}>
+                    Recommended Resources:
+                  </Text>
+                  {aiRecommendations.resources.campusSupport?.map((resource, index) => (
+                    <Text key={index} style={{ color: '#075985', marginBottom: 4, marginLeft: 8 }}>
+                      🏫 {resource}
+                    </Text>
+                  ))}
+                  {aiRecommendations.resources.techniques?.map((technique, index) => (
+                    <Text key={index} style={{ color: '#075985', marginBottom: 4, marginLeft: 8 }}>
+                      🛠️ {technique}
+                    </Text>
+                  ))}
+                </View>
+              )}
             </View>
           )}
-
-          {/* Wellness Challenges */}
-          <Text style={[{ fontSize: 20, fontWeight: 'bold', color: currentTheme.primary, marginBottom: 16 }]}>
-            🎯 Wellness Challenges
-          </Text>
-          
-          <FlatList
-            data={wellnessChallenges}
-            renderItem={renderChallenge}
-            keyExtractor={(item) => item.id.toString()}
-            scrollEnabled={false}
-          />
-
-          {/* Anonymous Support Groups */}
-          <Text style={[{ fontSize: 20, fontWeight: 'bold', color: currentTheme.primary, marginBottom: 16 }]}>
-            🤝 Anonymous Support Groups
-          </Text>
-          
-          <View style={[{ backgroundColor: '#fef7cd', padding: 16, borderRadius: 12, marginBottom: 16 }]}>
-            <Text style={[{ fontSize: 14, color: '#a16207', fontWeight: 'bold', marginBottom: 4 }]}>
-              🔒 Safe & Anonymous
-            </Text>
-            <Text style={[{ fontSize: 12, color: '#a16207' }]}>
-              All support groups are completely anonymous. Your identity is protected while you connect with others who understand.
-            </Text>
-          </View>
-          
-          <FlatList
-            data={anonymousSupportGroups}
-            renderItem={renderSupportGroup}
-            keyExtractor={(item) => item.id.toString()}
-            scrollEnabled={false}
-          />
         </View>
+
+        {renderWellnessResources()}
       </ScrollView>
 
-      {/* Emergency Button */}
-      <TouchableOpacity
-        style={[{
-          position: 'absolute',
-          bottom: 20,
-          right: 20,
-          backgroundColor: '#ef4444',
-          borderRadius: 30,
-          width: 60,
-          height: 60,
-          justifyContent: 'center',
-          alignItems: 'center',
-          shadowColor: '#000',
-          shadowOffset: { width: 0, height: 2 },
-          shadowOpacity: 0.25,
-          shadowRadius: 3.84,
-          elevation: 5
-        }]}
-        onPress={() => Alert.alert('Crisis Resources', 'National Suicide Prevention Lifeline: 988\nCrisis Text Line: Text HOME to 741741\n\nPlease reach out for help if you need it. You matter! 💙')}
-      >
-        <Text style={[{ fontSize: 24, color: 'white' }]}>🆘</Text>
-      </TouchableOpacity>
-
-      {/* Mood Modal */}
+      {/* Mood Tracker Modal */}
       <Modal
-        visible={showMoodModal}
+        visible={showMoodTracker}
         animationType="slide"
-        transparent={true}
+        presentationStyle="pageSheet"
       >
-        <View style={[{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', padding: 20 }]}>
-          <View style={[{ backgroundColor: currentTheme.surface, borderRadius: 20, padding: 24 }]}>
-            <Text style={[{ fontSize: 24, fontWeight: 'bold', color: currentTheme.primary, marginBottom: 20, textAlign: 'center' }]}>
-              😊 How are you feeling?
-            </Text>
-
-            <Text style={[{ color: currentTheme.text, fontSize: 16, marginBottom: 16, textAlign: 'center' }]}>
-              Rate your current stress level:
-            </Text>
-
-            <View style={[{ marginBottom: 24 }]}>
-              {stressLevels.map((level) => (
-                <TouchableOpacity
-                  key={level.level}
-                  style={[{
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    padding: 16,
-                    borderRadius: 12,
-                    marginBottom: 8,
-                    backgroundColor: stressLevel === level.level ? currentTheme.primary : currentTheme.background,
-                    borderWidth: 1,
-                    borderColor: currentTheme.border
-                  }]}
-                  onPress={() => setStressLevel(level.level)}
-                >
-                  <Text style={[{ fontSize: 24, marginRight: 16 }]}>{level.emoji}</Text>
-                  <Text style={[{
-                    fontSize: 16,
-                    color: stressLevel === level.level ? currentTheme.background : currentTheme.text,
-                    fontWeight: stressLevel === level.level ? 'bold' : 'normal'
-                  }]}>
-                    {level.label}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            <View style={[{ flexDirection: 'row', gap: 12 }]}>
-              <TouchableOpacity
-                style={[{ backgroundColor: currentTheme.border, borderRadius: 12, padding: 16, flex: 1 }]}
-                onPress={() => setShowMoodModal(false)}
-              >
-                <Text style={[{ color: currentTheme.text, textAlign: 'center', fontWeight: 'bold' }]}>
-                  Cancel
-                </Text>
+        <View style={{ flex: 1, backgroundColor: currentTheme.background }}>
+          <View style={{
+            backgroundColor: currentTheme.surface,
+            paddingTop: 20,
+            paddingBottom: 16,
+            paddingHorizontal: 20,
+            borderBottomWidth: 1,
+            borderBottomColor: currentTheme.border
+          }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+              <TouchableOpacity onPress={() => setShowMoodTracker(false)}>
+                <Text style={{ color: currentTheme.primary, fontSize: 16, fontWeight: '600' }}>Cancel</Text>
               </TouchableOpacity>
-              <TouchableOpacity
-                style={[{ backgroundColor: currentTheme.primary, borderRadius: 12, padding: 16, flex: 1 }]}
-                onPress={logMood}
-              >
-                <Text style={[{ color: currentTheme.background, textAlign: 'center', fontWeight: 'bold' }]}>
-                  Log Mood
-                </Text>
+              <Text style={{ fontSize: 18, fontWeight: 'bold', color: currentTheme.primary }}>
+                Mood Check-in
+              </Text>
+              <TouchableOpacity onPress={logMood}>
+                <Text style={{ color: currentTheme.primary, fontSize: 16, fontWeight: '600' }}>Done</Text>
               </TouchableOpacity>
             </View>
           </View>
+
+          <ScrollView style={{ flex: 1, padding: 20 }}>
+            {/* Mood Selection */}
+            <View style={{ marginBottom: 32 }}>
+              <Text style={{ fontSize: 18, fontWeight: 'bold', color: currentTheme.text, marginBottom: 16, textAlign: 'center' }}>
+                How are you feeling today?
+              </Text>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                {moods.map((mood) => (
+                  <TouchableOpacity
+                    key={mood.value}
+                    style={{
+                      alignItems: 'center',
+                      padding: 12,
+                      borderRadius: 16,
+                      backgroundColor: selectedMood === mood.value ? mood.color : currentTheme.surface,
+                      borderWidth: 2,
+                      borderColor: selectedMood === mood.value ? mood.color : currentTheme.border,
+                      opacity: selectedMood === mood.value ? 1 : 0.7
+                    }}
+                    onPress={() => setSelectedMood(mood.value)}
+                  >
+                    <Text style={{ fontSize: 32, marginBottom: 4 }}>{mood.emoji}</Text>
+                    <Text style={{
+                      color: selectedMood === mood.value ? 'white' : currentTheme.text,
+                      fontSize: 12,
+                      fontWeight: 'bold'
+                    }}>
+                      {mood.label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+
+            {/* Stress Level */}
+            <View style={{ marginBottom: 32 }}>
+              <Text style={{ fontSize: 18, fontWeight: 'bold', color: currentTheme.text, marginBottom: 16, textAlign: 'center' }}>
+                Stress Level: {stressLevel}/10
+              </Text>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 16 }}>
+                {stressLevels.map((level) => (
+                  <TouchableOpacity
+                    key={level}
+                    style={{
+                      width: 30,
+                      height: 30,
+                      borderRadius: 15,
+                      backgroundColor: stressLevel >= level ? '#ef4444' : currentTheme.surface,
+                      borderWidth: 1,
+                      borderColor: currentTheme.border,
+                      justifyContent: 'center',
+                      alignItems: 'center'
+                    }}
+                    onPress={() => setStressLevel(level)}
+                  >
+                    <Text style={{
+                      color: stressLevel >= level ? 'white' : currentTheme.textSecondary,
+                      fontSize: 12,
+                      fontWeight: 'bold'
+                    }}>
+                      {level}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                <Text style={{ color: currentTheme.textSecondary, fontSize: 12 }}>Low</Text>
+                <Text style={{ color: currentTheme.textSecondary, fontSize: 12 }}>High</Text>
+              </View>
+            </View>
+
+            {/* AI Recommendation Button */}
+            <TouchableOpacity
+              style={{
+                backgroundColor: '#6366f1',
+                borderRadius: 12,
+                padding: 16,
+                alignItems: 'center',
+                marginBottom: 20,
+                opacity: loadingAI ? 0.6 : 1
+              }}
+              onPress={generateAIWellnessRecommendations}
+              disabled={loadingAI}
+            >
+              {loadingAI ? (
+                <>
+                  <ActivityIndicator size="small" color="white" />
+                  <Text style={{ color: 'white', fontWeight: 'bold', marginTop: 8 }}>
+                    Generating Wellness Plan...
+                  </Text>
+                </>
+              ) : (
+                <Text style={{ color: 'white', fontSize: 16, fontWeight: 'bold' }}>
+                  🤖 Get AI Wellness Recommendations
+                </Text>
+              )}
+            </TouchableOpacity>
+
+            <Text style={{ color: currentTheme.textSecondary, fontSize: 12, textAlign: 'center', lineHeight: 18 }}>
+              AI recommendations are not a substitute for professional medical advice. If you're experiencing persistent mental health challenges, please seek professional support.
+            </Text>
+          </ScrollView>
         </View>
       </Modal>
     </View>

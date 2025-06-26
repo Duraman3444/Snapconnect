@@ -8,19 +8,24 @@ import {
   Alert, 
   Modal,
   FlatList,
-  RefreshControl
+  RefreshControl,
+  ActivityIndicator
 } from 'react-native';
 import { useAuth } from '../context/SupabaseAuthContext';
 import { useTheme } from '../context/ThemeContext';
+import ragService from '../services/ragService';
+import userProfileService from '../services/userProfileService';
 
 export default function TutoringMarketplaceScreen({ navigation }) {
   const [tutors, setTutors] = useState([]);
   const [requests, setRequests] = useState([]);
   const [userTutorProfile, setUserTutorProfile] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState('find_tutors'); // find_tutors, tutor_requests, become_tutor
+  const [activeTab, setActiveTab] = useState('find_tutors'); // find_tutors, tutor_requests, become_tutor, ai_recommendations
   const [showCreateRequest, setShowCreateRequest] = useState(false);
   const [showTutorProfile, setShowTutorProfile] = useState(false);
+  const [aiRecommendations, setAiRecommendations] = useState(null);
+  const [loadingAI, setLoadingAI] = useState(false);
   
   const { currentUser, supabase } = useAuth();
   const { currentTheme } = useTheme();
@@ -77,6 +82,94 @@ export default function TutoringMarketplaceScreen({ navigation }) {
       ]);
     }
   }, [currentUser, activeTab]);
+
+  // Load AI recommendations when switching to AI tab
+  useEffect(() => {
+    if (activeTab === 'ai_recommendations' && !aiRecommendations) {
+      loadAIRecommendations();
+    }
+  }, [activeTab]);
+
+  const loadAIRecommendations = async () => {
+    if (!currentUser?.id) return;
+
+    setLoadingAI(true);
+    try {
+      const userProfile = await userProfileService.getMockUserProfile(currentUser.id);
+      const contextualData = await userProfileService.getContextualUserData(currentUser.id, 'tutoring');
+      
+      // Generate AI-powered tutoring recommendations
+      const recommendations = await ragService.generateTutoringRecommendations(
+        userProfile,
+        {
+          subject: 'Data Structures', // Could be dynamic based on struggling subjects
+          topics: ['Binary Trees', 'Hash Tables', 'Graph Algorithms'],
+          goal: 'Improve understanding and exam performance',
+          timeline: '2 weeks',
+          struggles: ['Algorithm complexity', 'Implementation details']
+        }
+      );
+
+      setAiRecommendations(recommendations);
+
+      // Track AI usage
+      await userProfileService.trackActivity(currentUser.id, {
+        type: 'ai_tutoring_recommendations',
+        feature: 'tutoring_marketplace',
+        success: recommendations !== null
+      });
+
+    } catch (error) {
+      console.error('Error loading AI recommendations:', error);
+      Alert.alert('AI Error', 'Unable to load personalized recommendations at this time.');
+    } finally {
+      setLoadingAI(false);
+    }
+  };
+
+  // AI-Enhanced Request Creation
+  const handleAIAssistedRequest = async () => {
+    if (!newRequest.subject || !newRequest.topic_description) {
+      Alert.alert('Missing Information', 'Please provide subject and topic description for AI assistance.');
+      return;
+    }
+
+    setLoadingAI(true);
+    try {
+      const userProfile = await userProfileService.getMockUserProfile(currentUser.id);
+      
+      // Generate enhanced request description using AI
+      const enhancedRequest = await ragService.generateTutoringRecommendations(
+        userProfile,
+        {
+          subject: newRequest.subject,
+          topics: [newRequest.topic_description],
+          goal: 'Get personalized tutoring help',
+          timeline: newRequest.urgency_level === 'urgent' ? '1 week' : '2-3 weeks'
+        }
+      );
+
+      if (enhancedRequest.recommendations) {
+        // Update the request with AI suggestions
+        setNewRequest(prev => ({
+          ...prev,
+          additional_notes: `AI-Enhanced Request:\n\n${enhancedRequest.recommendations.tutorCriteria?.teachingStyle || 'Personalized teaching approach recommended'}\n\nSuggested Study Plan:\n${enhancedRequest.recommendations.studyPlan?.weeklyGoals?.join('\n• ') || 'Structured learning goals'}`
+        }));
+
+        Alert.alert(
+          '🤖 AI Enhancement Complete',
+          'Your request has been enhanced with personalized recommendations. Review the additional notes section.',
+          [{ text: 'Continue' }]
+        );
+      }
+
+    } catch (error) {
+      console.error('Error generating AI assistance:', error);
+      Alert.alert('AI Error', 'Unable to enhance request at this time.');
+    } finally {
+      setLoadingAI(false);
+    }
+  };
 
   const loadTutors = async () => {
     if (!currentUser?.id) return;
@@ -530,6 +623,146 @@ export default function TutoringMarketplaceScreen({ navigation }) {
     </View>
   );
 
+  // Render AI Recommendations Tab
+  const renderAIRecommendations = () => (
+    <ScrollView style={{ flex: 1, padding: 20 }}>
+      <View style={{ marginBottom: 24 }}>
+        <Text style={{ fontSize: 24, fontWeight: 'bold', color: currentTheme.primary, marginBottom: 8 }}>
+          🤖 AI Tutoring Assistant
+        </Text>
+        <Text style={{ color: currentTheme.textSecondary, fontSize: 16, lineHeight: 24 }}>
+          Get personalized tutoring recommendations based on your academic profile and learning patterns.
+        </Text>
+      </View>
+
+      {loadingAI ? (
+        <View style={{ alignItems: 'center', justifyContent: 'center', paddingVertical: 40 }}>
+          <ActivityIndicator size="large" color={currentTheme.primary} />
+          <Text style={{ color: currentTheme.textSecondary, marginTop: 16 }}>
+            Analyzing your academic profile...
+          </Text>
+        </View>
+      ) : aiRecommendations?.recommendations ? (
+        <View>
+          {/* Tutor Criteria */}
+          {aiRecommendations.recommendations.tutorCriteria && (
+            <View style={{ backgroundColor: currentTheme.surface, borderRadius: 16, padding: 20, marginBottom: 16 }}>
+              <Text style={{ fontSize: 18, fontWeight: 'bold', color: currentTheme.primary, marginBottom: 12 }}>
+                🎯 Ideal Tutor Profile
+              </Text>
+              <Text style={{ color: currentTheme.text, lineHeight: 20, marginBottom: 8 }}>
+                <Text style={{ fontWeight: 'bold' }}>Background: </Text>
+                {aiRecommendations.recommendations.tutorCriteria.preferredBackground}
+              </Text>
+              <Text style={{ color: currentTheme.text, lineHeight: 20, marginBottom: 8 }}>
+                <Text style={{ fontWeight: 'bold' }}>Teaching Style: </Text>
+                {aiRecommendations.recommendations.tutorCriteria.teachingStyle}
+              </Text>
+              <Text style={{ color: currentTheme.text, lineHeight: 20 }}>
+                <Text style={{ fontWeight: 'bold' }}>Session Structure: </Text>
+                {aiRecommendations.recommendations.tutorCriteria.sessionStructure}
+              </Text>
+            </View>
+          )}
+
+          {/* Study Plan */}
+          {aiRecommendations.recommendations.studyPlan && (
+            <View style={{ backgroundColor: currentTheme.surface, borderRadius: 16, padding: 20, marginBottom: 16 }}>
+              <Text style={{ fontSize: 18, fontWeight: 'bold', color: currentTheme.primary, marginBottom: 12 }}>
+                📚 Personalized Study Plan
+              </Text>
+              
+              {aiRecommendations.recommendations.studyPlan.weeklyGoals && (
+                <View style={{ marginBottom: 16 }}>
+                  <Text style={{ fontWeight: 'bold', color: currentTheme.text, marginBottom: 8 }}>Weekly Goals:</Text>
+                  {aiRecommendations.recommendations.studyPlan.weeklyGoals.map((goal, index) => (
+                    <Text key={index} style={{ color: currentTheme.text, marginLeft: 16, marginBottom: 4 }}>
+                      • {goal}
+                    </Text>
+                  ))}
+                </View>
+              )}
+
+              {aiRecommendations.recommendations.studyPlan.practiceAreas && (
+                <View style={{ marginBottom: 16 }}>
+                  <Text style={{ fontWeight: 'bold', color: currentTheme.text, marginBottom: 8 }}>Focus Areas:</Text>
+                  {aiRecommendations.recommendations.studyPlan.practiceAreas.map((area, index) => (
+                    <Text key={index} style={{ color: currentTheme.text, marginLeft: 16, marginBottom: 4 }}>
+                      • {area}
+                    </Text>
+                  ))}
+                </View>
+              )}
+
+              {aiRecommendations.recommendations.studyPlan.milestones && (
+                <View>
+                  <Text style={{ fontWeight: 'bold', color: currentTheme.text, marginBottom: 8 }}>Milestones:</Text>
+                  {aiRecommendations.recommendations.studyPlan.milestones.map((milestone, index) => (
+                    <Text key={index} style={{ color: currentTheme.text, marginLeft: 16, marginBottom: 4 }}>
+                      🎯 {milestone}
+                    </Text>
+                  ))}
+                </View>
+              )}
+            </View>
+          )}
+
+          {/* Questions to Ask Tutors */}
+          {aiRecommendations.recommendations.questions && (
+            <View style={{ backgroundColor: currentTheme.surface, borderRadius: 16, padding: 20, marginBottom: 16 }}>
+              <Text style={{ fontSize: 18, fontWeight: 'bold', color: currentTheme.primary, marginBottom: 12 }}>
+                ❓ Smart Questions to Ask Tutors
+              </Text>
+              {aiRecommendations.recommendations.questions.map((question, index) => (
+                <Text key={index} style={{ color: currentTheme.text, marginBottom: 8, lineHeight: 20 }}>
+                  {index + 1}. {question}
+                </Text>
+              ))}
+            </View>
+          )}
+
+          {/* Resources */}
+          {aiRecommendations.recommendations.resources && (
+            <View style={{ backgroundColor: currentTheme.surface, borderRadius: 16, padding: 20, marginBottom: 16 }}>
+              <Text style={{ fontSize: 18, fontWeight: 'bold', color: currentTheme.primary, marginBottom: 12 }}>
+                📖 Additional Resources
+              </Text>
+              {aiRecommendations.recommendations.resources.map((resource, index) => (
+                <Text key={index} style={{ color: currentTheme.text, marginBottom: 4 }}>
+                  • {resource}
+                </Text>
+              ))}
+            </View>
+          )}
+
+          <TouchableOpacity
+            style={{ backgroundColor: currentTheme.primary, borderRadius: 12, padding: 16, alignItems: 'center' }}
+            onPress={() => setActiveTab('find_tutors')}
+          >
+            <Text style={{ color: currentTheme.background, fontSize: 16, fontWeight: 'bold' }}>
+              Find Matching Tutors
+            </Text>
+          </TouchableOpacity>
+        </View>
+      ) : (
+        <View style={{ alignItems: 'center', paddingVertical: 40 }}>
+          <Text style={{ fontSize: 48, marginBottom: 16 }}>🤖</Text>
+          <Text style={{ color: currentTheme.textSecondary, textAlign: 'center', marginBottom: 20 }}>
+            No recommendations loaded yet.
+          </Text>
+          <TouchableOpacity
+            style={{ backgroundColor: currentTheme.primary, borderRadius: 12, paddingHorizontal: 24, paddingVertical: 12 }}
+            onPress={loadAIRecommendations}
+          >
+            <Text style={{ color: currentTheme.background, fontWeight: 'bold' }}>
+              Get AI Recommendations
+            </Text>
+          </TouchableOpacity>
+        </View>
+      )}
+    </ScrollView>
+  );
+
   return (
     <View style={{ flex: 1, backgroundColor: currentTheme.background }}>
       {/* Header */}
@@ -564,7 +797,8 @@ export default function TutoringMarketplaceScreen({ navigation }) {
           {[
             { key: 'find_tutors', label: '🔍 Find Tutors' },
             { key: 'tutor_requests', label: '📋 Requests' },
-            { key: 'become_tutor', label: userTutorProfile ? '👨‍🏫 My Profile' : '🎯 Become Tutor' }
+            { key: 'become_tutor', label: userTutorProfile ? '👨‍🏫 My Profile' : '🎯 Become Tutor' },
+            { key: 'ai_recommendations', label: '🤖 AI Recommendations' }
           ].map((tab) => (
             <TouchableOpacity
               key={tab.key}
@@ -725,6 +959,8 @@ export default function TutoringMarketplaceScreen({ navigation }) {
           )}
         </ScrollView>
       )}
+
+      {activeTab === 'ai_recommendations' && renderAIRecommendations()}
 
       {/* Create Request Modal */}
       <Modal

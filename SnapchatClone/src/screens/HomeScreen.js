@@ -216,6 +216,31 @@ export default function HomeScreen({ navigation }) {
             </TouchableOpacity>
           </View>
 
+          {/* NEW: RAG AI Features */}
+          <View style={[{ backgroundColor: '#f3e8ff', borderRadius: 20, padding: 20, marginBottom: 24 }]}>
+            <Text style={[{ fontSize: 18, color: '#7c3aed', fontWeight: 'bold', textAlign: 'center', marginBottom: 8 }]}>
+              🤖 AI-Powered Features
+            </Text>
+            <Text style={[{ color: '#5b21b6', fontSize: 14, textAlign: 'center', marginBottom: 16 }]}>
+              Smart personalized recommendations just for you!
+            </Text>
+            <TouchableOpacity
+              style={[{ backgroundColor: '#8b5cf6', borderRadius: 16, padding: 16, marginBottom: 12, alignItems: 'center' }]}
+              onPress={() => navigation.navigate('RAGHome')}
+            >
+              <Text style={[{ fontSize: 24, marginBottom: 4 }]}>🚀</Text>
+              <Text style={[{ color: 'white', fontWeight: 'bold', fontSize: 16, marginBottom: 4 }]}>AI Hub</Text>
+              <Text style={[{ color: '#f3e8ff', fontSize: 12, textAlign: 'center' }]}>
+                Smart captions • Event suggestions • Study matching • Campus recommendations
+              </Text>
+            </TouchableOpacity>
+            <View style={[{ backgroundColor: '#ede9fe', borderRadius: 12, padding: 12 }]}>
+              <Text style={[{ color: '#6d28d9', fontSize: 12, fontWeight: 'bold', textAlign: 'center' }]}>
+                ✨ Powered by OpenAI GPT • Personalized for college life
+              </Text>
+            </View>
+          </View>
+
           {/* Academic Features */}
           <View style={[{ backgroundColor: '#f8fafc', borderRadius: 20, padding: 20, marginBottom: 24 }]}>
             <Text style={[{ fontSize: 18, color: currentTheme.primary, fontWeight: 'bold', textAlign: 'center', marginBottom: 16 }]}>

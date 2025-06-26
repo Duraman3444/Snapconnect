@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { View, Text, TouchableOpacity, Alert, Image, StyleSheet, PanResponder, Dimensions, Modal, ScrollView, SafeAreaView, Platform } from 'react-native';
+import { View, Text, TouchableOpacity, Alert, Image, StyleSheet, PanResponder, Dimensions, Modal, ScrollView, SafeAreaView, Platform, TextInput } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { Video } from 'expo-av';
 import * as MediaLibrary from 'expo-media-library';
@@ -8,6 +8,8 @@ import * as FileSystem from 'expo-file-system';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '../context/SupabaseAuthContext';
 import { useTheme } from '../context/ThemeContext';
+import ragService from '../services/ragService';
+import userProfileService from '../services/userProfileService';
 
 // Updated function to find the most recent FILE of any type, with extensive logging.
 const findMostRecentFile = async (directory) => {
@@ -65,6 +67,13 @@ export default function CameraScreen({ navigation }) {
   const recordingTimerRef = useRef(null);
   const { currentUser, logout, supabase } = useAuth();
   const { currentTheme } = useTheme();
+  
+  // RAG-related state
+  const [ragCaptions, setRagCaptions] = useState([]);
+  const [selectedCaption, setSelectedCaption] = useState('');
+  const [isGeneratingCaptions, setIsGeneratingCaptions] = useState(false);
+  const [showCaptionModal, setShowCaptionModal] = useState(false);
+  const [customCaption, setCustomCaption] = useState('');
   
   const wasRecording = useRef(false);
 
@@ -282,6 +291,39 @@ export default function CameraScreen({ navigation }) {
     setVideo(null);
     setShowActionModal(false);
     setUploading(false);
+    setRagCaptions([]);
+    setSelectedCaption('');
+    setShowCaptionModal(false);
+    setCustomCaption('');
+  };
+
+  // RAG Feature #1: Smart Caption Generation
+  const generateRAGCaptions = async (imageContext = 'photo') => {
+    setIsGeneratingCaptions(true);
+    try {
+      // Get user profile for personalization
+      const userProfile = await userProfileService.getMockUserProfile(currentUser.id);
+      
+      console.log('🤖 Generating RAG captions for:', imageContext);
+      const result = await ragService.generateSmartCaption(imageContext, userProfile);
+      
+      setRagCaptions(result.suggestions);
+      setShowCaptionModal(true);
+      console.log('✅ Generated captions:', result.suggestions);
+      
+    } catch (error) {
+      console.error('Error generating RAG captions:', error);
+      Alert.alert('Caption Generation', 'Unable to generate smart captions. Please try again.');
+      // Fallback captions
+      setRagCaptions([
+        'College life! 📚✨',
+        'Making memories! 🎉',
+        'Another day, another adventure! 🌟'
+      ]);
+      setShowCaptionModal(true);
+    } finally {
+      setIsGeneratingCaptions(false);
+    }
   };
   
   // Generic upload function
@@ -731,49 +773,72 @@ export default function CameraScreen({ navigation }) {
             </Text>
             
             {/* Action Buttons */}
-            <View style={[{ flexDirection: 'row', marginBottom: 20 }]}>
+            <View style={[{ marginBottom: 20 }]}>
+              {/* AI Caption Button */}
               <TouchableOpacity
                 style={[{ 
-                  flex: 1, 
-                  backgroundColor: currentTheme.primary, 
+                  backgroundColor: '#6B46C1', 
                   borderRadius: 15, 
                   paddingVertical: 12,
-                  marginRight: 8
+                  marginBottom: 10
                 }]}
-                onPress={uploadStory}
-                disabled={uploading}
+                onPress={() => generateRAGCaptions(photo ? 'photo' : 'video')}
+                disabled={isGeneratingCaptions}
               >
                 <Text style={[{ 
-                  color: currentTheme.background, 
+                  color: 'white', 
                   fontWeight: '600', 
                   textAlign: 'center',
                   fontSize: 16
                 }]}>
-                  {uploading ? 'Uploading...' : '📖 Post Story'}
+                  {isGeneratingCaptions ? '🤖 Generating...' : '🤖 AI Smart Captions'}
                 </Text>
               </TouchableOpacity>
               
-              <TouchableOpacity
-                style={[{ 
-                  flex: 1, 
-                  backgroundColor: currentTheme.background, 
-                  borderRadius: 15, 
-                  paddingVertical: 12,
-                  borderWidth: 2,
-                  borderColor: currentTheme.primary,
-                  marginLeft: 8
-                }]}
-                onPress={resetState}
-              >
-                <Text style={[{ 
-                  color: currentTheme.primary, 
-                  fontWeight: '600', 
-                  textAlign: 'center',
-                  fontSize: 16
-                }]}>
-                  🔄 Retake
-                </Text>
-              </TouchableOpacity>
+              <View style={[{ flexDirection: 'row' }]}>
+                <TouchableOpacity
+                  style={[{ 
+                    flex: 1, 
+                    backgroundColor: currentTheme.primary, 
+                    borderRadius: 15, 
+                    paddingVertical: 12,
+                    marginRight: 8
+                  }]}
+                  onPress={uploadStory}
+                  disabled={uploading}
+                >
+                  <Text style={[{ 
+                    color: currentTheme.background, 
+                    fontWeight: '600', 
+                    textAlign: 'center',
+                    fontSize: 16
+                  }]}>
+                    {uploading ? 'Uploading...' : '📖 Post Story'}
+                  </Text>
+                </TouchableOpacity>
+                
+                <TouchableOpacity
+                  style={[{ 
+                    flex: 1, 
+                    backgroundColor: currentTheme.background, 
+                    borderRadius: 15, 
+                    paddingVertical: 12,
+                    borderWidth: 2,
+                    borderColor: currentTheme.primary,
+                    marginLeft: 8
+                  }]}
+                  onPress={resetState}
+                >
+                  <Text style={[{ 
+                    color: currentTheme.primary, 
+                    fontWeight: '600', 
+                    textAlign: 'center',
+                    fontSize: 16
+                  }]}>
+                    🔄 Retake
+                  </Text>
+                </TouchableOpacity>
+              </View>
             </View>
 
             {/* Friends List for Sending */}
@@ -841,10 +906,120 @@ export default function CameraScreen({ navigation }) {
               </Text>
             )}
           </View>
+              </View>
+
+      {/* RAG Caption Selection Modal */}
+      <Modal
+        visible={showCaptionModal}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowCaptionModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContainer, { backgroundColor: currentTheme.surface }]}>
+            <View style={styles.modalHeader}>
+              <TouchableOpacity
+                style={styles.modalCloseButton}
+                onPress={() => setShowCaptionModal(false)}
+              >
+                <Text style={[styles.modalCloseText, { color: currentTheme.text }]}>✕</Text>
+              </TouchableOpacity>
+              <Text style={[styles.modalTitle, { color: currentTheme.text }]}>
+                🤖 AI Smart Captions
+              </Text>
+              <View style={{ width: 30 }} />
+            </View>
+            
+            <ScrollView style={styles.friendsList}>
+              <View style={{ padding: 20 }}>
+                <Text style={[{ fontSize: 16, fontWeight: 'bold', marginBottom: 15, color: currentTheme.text }]}>
+                  Choose a caption or create your own:
+                </Text>
+                
+                {/* Generated Captions */}
+                {ragCaptions.map((caption, index) => (
+                  <TouchableOpacity
+                    key={index}
+                    style={[{
+                      padding: 15,
+                      marginBottom: 10,
+                      borderRadius: 12,
+                      backgroundColor: selectedCaption === caption ? currentTheme.primary : currentTheme.background,
+                      borderWidth: 1,
+                      borderColor: currentTheme.primary
+                    }]}
+                    onPress={() => setSelectedCaption(caption)}
+                  >
+                    <Text style={[{
+                      fontSize: 16,
+                      color: selectedCaption === caption ? currentTheme.background : currentTheme.text
+                    }]}>
+                      {caption}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+                
+                {/* Custom Caption Input */}
+                <View style={{ marginTop: 20 }}>
+                  <Text style={[{ fontSize: 16, fontWeight: 'bold', marginBottom: 10, color: currentTheme.text }]}>
+                    Or write your own:
+                  </Text>
+                  <TextInput
+                    style={[{
+                      borderWidth: 1,
+                      borderColor: currentTheme.primary,
+                      borderRadius: 12,
+                      padding: 15,
+                      fontSize: 16,
+                      backgroundColor: currentTheme.background,
+                      color: currentTheme.text,
+                      minHeight: 50
+                    }]}
+                    placeholder="Write your caption here..."
+                    placeholderTextColor={currentTheme.textSecondary}
+                    value={customCaption}
+                    onChangeText={setCustomCaption}
+                    multiline={true}
+                    onFocus={() => setSelectedCaption('')}
+                  />
+                </View>
+                
+                {/* Use Caption Button */}
+                <TouchableOpacity
+                  style={[{
+                    backgroundColor: currentTheme.primary,
+                    borderRadius: 12,
+                    padding: 15,
+                    marginTop: 20,
+                    alignItems: 'center'
+                  }]}
+                  onPress={() => {
+                    const finalCaption = customCaption || selectedCaption;
+                    if (finalCaption) {
+                      Alert.alert('Caption Selected', `Caption: "${finalCaption}"`);
+                      // Here you could integrate with your story/snap posting logic
+                      setShowCaptionModal(false);
+                    } else {
+                      Alert.alert('No Caption', 'Please select or write a caption first.');
+                    }
+                  }}
+                >
+                  <Text style={[{
+                    color: currentTheme.background,
+                    fontSize: 16,
+                    fontWeight: '600'
+                  }]}>
+                    Use Caption
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </ScrollView>
+          </View>
         </View>
-      </View>
-    );
-  }
+      </Modal>
+    </View>
+  );
+}
 
   return (
     <View className="flex-1 bg-black" {...panResponder.panHandlers}>
@@ -903,6 +1078,20 @@ export default function CameraScreen({ navigation }) {
         >
           <Text style={{ color: 'white', fontSize: 20 }}>🏫</Text>
           <Text style={{ color: 'white', fontSize: 10, marginTop: 2 }}>Campus</Text>
+        </TouchableOpacity>
+        
+        <TouchableOpacity
+          onPress={() => navigation.navigate('RAGHome')}
+          style={{
+            backgroundColor: 'rgba(107, 70, 193, 0.9)',
+            borderRadius: 25,
+            padding: 12,
+            alignItems: 'center',
+            minWidth: 50
+          }}
+        >
+          <Text style={{ color: 'white', fontSize: 20 }}>🤖</Text>
+          <Text style={{ color: 'white', fontSize: 10, marginTop: 2 }}>AI Hub</Text>
         </TouchableOpacity>
       </View>
 
@@ -1006,6 +1195,116 @@ export default function CameraScreen({ navigation }) {
           <Text style={{ fontSize: 20, fontWeight: 'bold' }}>📱</Text>
         </TouchableOpacity>
       </View>
+
+      {/* RAG Caption Selection Modal */}
+      <Modal
+        visible={showCaptionModal}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowCaptionModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContainer, { backgroundColor: currentTheme.surface }]}>
+            <View style={styles.modalHeader}>
+              <TouchableOpacity
+                style={styles.modalCloseButton}
+                onPress={() => setShowCaptionModal(false)}
+              >
+                <Text style={[styles.modalCloseText, { color: currentTheme.text }]}>✕</Text>
+              </TouchableOpacity>
+              <Text style={[styles.modalTitle, { color: currentTheme.text }]}>
+                🤖 AI Smart Captions
+              </Text>
+              <View style={{ width: 30 }} />
+            </View>
+            
+            <ScrollView style={styles.friendsList}>
+              <View style={{ padding: 20 }}>
+                <Text style={[{ fontSize: 16, fontWeight: 'bold', marginBottom: 15, color: currentTheme.text }]}>
+                  Choose a caption or create your own:
+                </Text>
+                
+                {/* Generated Captions */}
+                {ragCaptions.map((caption, index) => (
+                  <TouchableOpacity
+                    key={index}
+                    style={[{
+                      padding: 15,
+                      marginBottom: 10,
+                      borderRadius: 12,
+                      backgroundColor: selectedCaption === caption ? currentTheme.primary : currentTheme.background,
+                      borderWidth: 1,
+                      borderColor: currentTheme.primary
+                    }]}
+                    onPress={() => setSelectedCaption(caption)}
+                  >
+                    <Text style={[{
+                      fontSize: 16,
+                      color: selectedCaption === caption ? currentTheme.background : currentTheme.text
+                    }]}>
+                      {caption}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+                
+                {/* Custom Caption Input */}
+                <View style={{ marginTop: 20 }}>
+                  <Text style={[{ fontSize: 16, fontWeight: 'bold', marginBottom: 10, color: currentTheme.text }]}>
+                    Or write your own:
+                  </Text>
+                  <TextInput
+                    style={[{
+                      borderWidth: 1,
+                      borderColor: currentTheme.primary,
+                      borderRadius: 12,
+                      padding: 15,
+                      fontSize: 16,
+                      backgroundColor: currentTheme.background,
+                      color: currentTheme.text,
+                      minHeight: 50
+                    }]}
+                    placeholder="Write your caption here..."
+                    placeholderTextColor={currentTheme.textSecondary}
+                    value={customCaption}
+                    onChangeText={setCustomCaption}
+                    multiline={true}
+                    onFocus={() => setSelectedCaption('')}
+                  />
+                </View>
+                
+                {/* Use Caption Button */}
+                <TouchableOpacity
+                  style={[{
+                    backgroundColor: currentTheme.primary,
+                    borderRadius: 12,
+                    padding: 15,
+                    marginTop: 20,
+                    alignItems: 'center'
+                  }]}
+                  onPress={() => {
+                    const finalCaption = customCaption || selectedCaption;
+                    if (finalCaption) {
+                      Alert.alert('Caption Selected', `Caption: "${finalCaption}"`);
+                      // Here you could integrate with your story/snap posting logic
+                      setShowCaptionModal(false);
+                    } else {
+                      Alert.alert('No Caption', 'Please select or write a caption first.');
+                    }
+                  }}
+                >
+                  <Text style={[{
+                    color: currentTheme.background,
+                    fontSize: 16,
+                    fontWeight: '600'
+                  }]}>
+                    Use Caption
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }

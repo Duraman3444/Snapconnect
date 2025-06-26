@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, FlatList, Alert, TextInput, Modal } from 'react-native';
+import { View, Text, TouchableOpacity, FlatList, Alert, TextInput, Modal, ActivityIndicator } from 'react-native';
 import { useAuth } from '../context/SupabaseAuthContext';
 import { useTheme } from '../context/ThemeContext';
+import ragService from '../services/ragService';
+import userProfileService from '../services/userProfileService';
 
 export default function LostAndFoundScreen({ navigation }) {
   const { currentUser, supabase } = useAuth();
@@ -13,6 +15,8 @@ export default function LostAndFoundScreen({ navigation }) {
   const [description, setDescription] = useState('');
   const [location, setLocation] = useState('');
   const [category, setCategory] = useState('electronics');
+  const [loadingAI, setLoadingAI] = useState(false);
+  const [aiEnhancement, setAiEnhancement] = useState(null);
 
   const categories = [
     { value: 'electronics', label: '📱 Electronics' },
@@ -42,6 +46,75 @@ export default function LostAndFoundScreen({ navigation }) {
       setItems(data || []);
     } catch (error) {
       console.error('Error loading items:', error);
+      // Mock data for demonstration
+      setItems([
+        {
+          id: '1',
+          reporter_id: 'user1',
+          item_name: 'iPhone 13',
+          description: 'Blue iPhone 13 with cracked screen protector',
+          location: 'Library Study Room 3',
+          category: 'electronics',
+          type: 'lost',
+          status: 'active',
+          created_at: '2024-01-15T10:00:00Z',
+          reporter: { username: 'student123' }
+        },
+        {
+          id: '2',
+          reporter_id: 'user2',
+          item_name: 'Math Textbook',
+          description: 'Calculus textbook with yellow highlighter marks',
+          location: 'Engineering Building',
+          category: 'books',
+          type: 'found',
+          status: 'active',
+          created_at: '2024-01-14T15:30:00Z',
+          reporter: { username: 'helper456' }
+        }
+      ]);
+    }
+  };
+
+  // AI-Enhanced Item Description
+  const generateAIDescription = async () => {
+    if (!itemName || !description || !location) {
+      Alert.alert('Missing Information', 'Please fill in item name, description, and location before using AI enhancement.');
+      return;
+    }
+
+    setLoadingAI(true);
+    try {
+      const itemDetails = {
+        name: itemName,
+        category: category,
+        description: description,
+        location: location,
+        timeLost: isLostItem ? 'Recently' : 'N/A'
+      };
+
+      const enhancement = await ragService.generateLostItemDescription(itemDetails);
+      
+      if (enhancement) {
+        setAiEnhancement(enhancement);
+        Alert.alert(
+          '🤖 AI Enhancement Ready',
+          'AI has generated an enhanced description and recovery tips. Review the suggestions below.',
+          [{ text: 'Review', onPress: () => {} }]
+        );
+
+        // Track AI usage
+        await userProfileService.trackActivity(currentUser.id, {
+          type: 'ai_lost_found_enhancement',
+          category: category,
+          success: true
+        });
+      }
+    } catch (error) {
+      console.error('Error generating AI description:', error);
+      Alert.alert('AI Error', 'Unable to enhance description at this time.');
+    } finally {
+      setLoadingAI(false);
     }
   };
 
@@ -52,30 +125,43 @@ export default function LostAndFoundScreen({ navigation }) {
     }
 
     try {
+      // Use AI-enhanced description if available
+      const finalDescription = aiEnhancement?.enhancedDescription || description;
+      
       const { error } = await supabase
         .from('lost_and_found')
         .insert({
           reporter_id: currentUser.id,
           item_name: itemName,
-          description,
+          description: finalDescription,
           location,
           category,
           type: isLostItem ? 'lost' : 'found',
-          status: 'active'
+          status: 'active',
+          ai_enhanced: aiEnhancement !== null
         });
 
       if (error) throw error;
 
       setShowReportModal(false);
-      setItemName('');
-      setDescription('');
-      setLocation('');
-      setCategory('electronics');
+      resetForm();
       loadItems();
-      Alert.alert('Success', `Item ${isLostItem ? 'lost' : 'found'} report submitted! 📋`);
+      
+      Alert.alert(
+        'Success', 
+        `Item ${isLostItem ? 'lost' : 'found'} report submitted! ${aiEnhancement ? '🤖 Enhanced with AI suggestions.' : '📋'}`
+      );
     } catch (error) {
       Alert.alert('Error', 'Failed to report item');
     }
+  };
+
+  const resetForm = () => {
+    setItemName('');
+    setDescription('');
+    setLocation('');
+    setCategory('electronics');
+    setAiEnhancement(null);
   };
 
   const markAsResolved = async (itemId) => {
@@ -116,6 +202,7 @@ export default function LostAndFoundScreen({ navigation }) {
             </Text>
             <Text style={[{ color: currentTheme.textSecondary, fontSize: 14 }]}>
               {item.type === 'lost' ? 'Lost' : 'Found'} by: {item.reporter?.username || 'Unknown'}
+              {item.ai_enhanced && ' 🤖'}
             </Text>
           </View>
           <View style={[{ alignItems: 'flex-end' }]}>
@@ -200,40 +287,25 @@ export default function LostAndFoundScreen({ navigation }) {
           🔍 Lost & Found
         </Text>
         <Text style={[{ color: currentTheme.textSecondary, textAlign: 'center', marginTop: 8 }]}>
-          Campus-wide lost item reporting and finding
+          AI-powered item recovery system
         </Text>
       </View>
 
-      {/* Stats Banner */}
-      <View style={[{ flexDirection: 'row', padding: 16, gap: 16 }]}>
-        <View style={[{ backgroundColor: '#fef3c7', borderRadius: 12, padding: 16, flex: 1 }]}>
-          <Text style={[{ fontSize: 24, textAlign: 'center', marginBottom: 8 }]}>❌</Text>
-          <Text style={[{ color: '#d97706', fontWeight: 'bold', textAlign: 'center' }]}>
-            {items.filter(i => i.type === 'lost').length} Lost
-          </Text>
-        </View>
-        <View style={[{ backgroundColor: '#dcfce7', borderRadius: 12, padding: 16, flex: 1 }]}>
-          <Text style={[{ fontSize: 24, textAlign: 'center', marginBottom: 8 }]}>✅</Text>
-          <Text style={[{ color: '#166534', fontWeight: 'bold', textAlign: 'center' }]}>
-            {items.filter(i => i.type === 'found').length} Found
-          </Text>
-        </View>
-      </View>
-
-      {/* Content */}
+      {/* Items List */}
       <FlatList
         data={items}
         renderItem={renderItem}
         keyExtractor={(item) => item.id}
-        contentContainerStyle={{ padding: 16, paddingBottom: 100 }}
+        contentContainerStyle={{ padding: 20 }}
+        showsVerticalScrollIndicator={false}
         ListEmptyComponent={
           <View style={[{ alignItems: 'center', paddingVertical: 40 }]}>
-            <Text style={[{ fontSize: 64, marginBottom: 16 }]}>🔍</Text>
-            <Text style={[{ fontSize: 20, fontWeight: 'bold', color: currentTheme.primary, marginBottom: 8 }]}>
-              No items reported yet
+            <Text style={[{ fontSize: 48, marginBottom: 16 }]}>🔍</Text>
+            <Text style={[{ fontSize: 18, fontWeight: 'bold', color: currentTheme.primary, marginBottom: 8 }]}>
+              No Items Reported
             </Text>
             <Text style={[{ color: currentTheme.textSecondary, textAlign: 'center' }]}>
-              Be the first to report a lost or found item
+              Be the first to report a lost or found item!
             </Text>
           </View>
         }
@@ -243,173 +315,260 @@ export default function LostAndFoundScreen({ navigation }) {
       <TouchableOpacity
         style={[{
           position: 'absolute',
-          bottom: 20,
-          right: 20,
+          bottom: 30,
+          right: 30,
           backgroundColor: currentTheme.primary,
           borderRadius: 30,
           width: 60,
           height: 60,
           justifyContent: 'center',
           alignItems: 'center',
+          elevation: 5,
           shadowColor: '#000',
           shadowOffset: { width: 0, height: 2 },
           shadowOpacity: 0.25,
           shadowRadius: 3.84,
-          elevation: 5
         }]}
         onPress={() => setShowReportModal(true)}
       >
-        <Text style={[{ fontSize: 24, color: currentTheme.background }]}>➕</Text>
+        <Text style={[{ color: currentTheme.background, fontSize: 24, fontWeight: 'bold' }]}>
+          +
+        </Text>
       </TouchableOpacity>
 
       {/* Report Item Modal */}
       <Modal
         visible={showReportModal}
         animationType="slide"
-        transparent={true}
+        presentationStyle="pageSheet"
       >
-        <View style={[{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', padding: 20 }]}>
-          <View style={[{ backgroundColor: currentTheme.surface, borderRadius: 20, padding: 24 }]}>
-            <Text style={[{ fontSize: 24, fontWeight: 'bold', color: currentTheme.primary, marginBottom: 20, textAlign: 'center' }]}>
-              📋 Report Item
-            </Text>
+        <View style={[{ flex: 1, backgroundColor: currentTheme.background }]}>
+          <View style={[{
+            backgroundColor: currentTheme.surface,
+            paddingTop: 20,
+            paddingBottom: 16,
+            paddingHorizontal: 20,
+            borderBottomWidth: 1,
+            borderBottomColor: currentTheme.border
+          }]}>
+            <View style={[{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }]}>
+              <TouchableOpacity onPress={() => { setShowReportModal(false); resetForm(); }}>
+                <Text style={[{ color: currentTheme.primary, fontSize: 16, fontWeight: '600' }]}>Cancel</Text>
+              </TouchableOpacity>
+              <Text style={[{ fontSize: 18, fontWeight: 'bold', color: currentTheme.primary }]}>
+                Report Item
+              </Text>
+              <TouchableOpacity onPress={reportItem}>
+                <Text style={[{ color: currentTheme.primary, fontSize: 16, fontWeight: '600' }]}>Done</Text>
+              </TouchableOpacity>
+            </View>
 
             {/* Lost/Found Toggle */}
-            <View style={[{ flexDirection: 'row', marginBottom: 20, backgroundColor: currentTheme.background, borderRadius: 8 }]}>
+            <View style={[{ flexDirection: 'row', backgroundColor: currentTheme.background, borderRadius: 12, padding: 4 }]}>
               <TouchableOpacity
-                style={[{ 
-                  flex: 1, 
-                  padding: 12, 
+                style={[{
+                  flex: 1,
                   backgroundColor: isLostItem ? '#f59e0b' : 'transparent',
-                  borderRadius: 8
+                  borderRadius: 8,
+                  padding: 12,
+                  alignItems: 'center'
                 }]}
                 onPress={() => setIsLostItem(true)}
               >
-                <Text style={[{ 
-                  textAlign: 'center', 
-                  fontWeight: 'bold',
-                  color: isLostItem ? 'white' : currentTheme.text
-                }]}>
+                <Text style={[{ color: isLostItem ? 'white' : currentTheme.textSecondary, fontWeight: 'bold' }]}>
                   ❌ Lost Item
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[{ 
-                  flex: 1, 
-                  padding: 12, 
+                style={[{
+                  flex: 1,
                   backgroundColor: !isLostItem ? '#10b981' : 'transparent',
-                  borderRadius: 8
+                  borderRadius: 8,
+                  padding: 12,
+                  alignItems: 'center'
                 }]}
                 onPress={() => setIsLostItem(false)}
               >
-                <Text style={[{ 
-                  textAlign: 'center', 
-                  fontWeight: 'bold',
-                  color: !isLostItem ? 'white' : currentTheme.text
-                }]}>
+                <Text style={[{ color: !isLostItem ? 'white' : currentTheme.textSecondary, fontWeight: 'bold' }]}>
                   ✅ Found Item
                 </Text>
               </TouchableOpacity>
             </View>
+          </View>
 
-            <TextInput
+          {/* Form */}
+          <View style={[{ flex: 1, padding: 20 }]}>
+            {/* Item Name */}
+            <View style={[{ marginBottom: 20 }]}>
+              <Text style={[{ color: currentTheme.text, fontSize: 16, fontWeight: 'bold', marginBottom: 8 }]}>
+                Item Name *
+              </Text>
+              <TextInput
+                style={[{
+                  backgroundColor: currentTheme.surface,
+                  borderRadius: 12,
+                  padding: 16,
+                  fontSize: 16,
+                  color: currentTheme.text,
+                  borderWidth: 1,
+                  borderColor: currentTheme.border
+                }]}
+                placeholder="e.g., iPhone 13, Math Textbook"
+                placeholderTextColor={currentTheme.textSecondary}
+                value={itemName}
+                onChangeText={setItemName}
+              />
+            </View>
+
+            {/* Category */}
+            <View style={[{ marginBottom: 20 }]}>
+              <Text style={[{ color: currentTheme.text, fontSize: 16, fontWeight: 'bold', marginBottom: 8 }]}>
+                Category *
+              </Text>
+              <View style={[{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }]}>
+                {categories.map((cat) => (
+                  <TouchableOpacity
+                    key={cat.value}
+                    style={[{
+                      backgroundColor: category === cat.value ? currentTheme.primary : currentTheme.surface,
+                      borderRadius: 20,
+                      paddingHorizontal: 16,
+                      paddingVertical: 8,
+                      borderWidth: 1,
+                      borderColor: currentTheme.border
+                    }]}
+                    onPress={() => setCategory(cat.value)}
+                  >
+                    <Text style={[{
+                      color: category === cat.value ? currentTheme.background : currentTheme.text,
+                      fontWeight: '600'
+                    }]}>
+                      {cat.label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+
+            {/* Description */}
+            <View style={[{ marginBottom: 20 }]}>
+              <Text style={[{ color: currentTheme.text, fontSize: 16, fontWeight: 'bold', marginBottom: 8 }]}>
+                Description *
+              </Text>
+              <TextInput
+                style={[{
+                  backgroundColor: currentTheme.surface,
+                  borderRadius: 12,
+                  padding: 16,
+                  fontSize: 16,
+                  color: currentTheme.text,
+                  borderWidth: 1,
+                  borderColor: currentTheme.border,
+                  height: 100,
+                  textAlignVertical: 'top'
+                }]}
+                placeholder="Describe the item in detail (color, size, condition, etc.)"
+                placeholderTextColor={currentTheme.textSecondary}
+                value={description}
+                onChangeText={setDescription}
+                multiline
+              />
+            </View>
+
+            {/* Location */}
+            <View style={[{ marginBottom: 20 }]}>
+              <Text style={[{ color: currentTheme.text, fontSize: 16, fontWeight: 'bold', marginBottom: 8 }]}>
+                Location *
+              </Text>
+              <TextInput
+                style={[{
+                  backgroundColor: currentTheme.surface,
+                  borderRadius: 12,
+                  padding: 16,
+                  fontSize: 16,
+                  color: currentTheme.text,
+                  borderWidth: 1,
+                  borderColor: currentTheme.border
+                }]}
+                placeholder="Where was it lost/found?"
+                placeholderTextColor={currentTheme.textSecondary}
+                value={location}
+                onChangeText={setLocation}
+              />
+            </View>
+
+            {/* AI Enhancement Button */}
+            <TouchableOpacity
               style={[{
-                backgroundColor: currentTheme.background,
+                backgroundColor: '#6366f1',
                 borderRadius: 12,
                 padding: 16,
-                marginBottom: 16,
-                borderWidth: 1,
-                borderColor: currentTheme.border,
-                color: currentTheme.text
+                alignItems: 'center',
+                marginBottom: 20,
+                opacity: loadingAI ? 0.6 : 1
               }]}
-              placeholder="Item name"
-              placeholderTextColor={currentTheme.textSecondary}
-              value={itemName}
-              onChangeText={setItemName}
-            />
-
-            <TextInput
-              style={[{
-                backgroundColor: currentTheme.background,
-                borderRadius: 12,
-                padding: 16,
-                marginBottom: 16,
-                borderWidth: 1,
-                borderColor: currentTheme.border,
-                color: currentTheme.text,
-                height: 80,
-                textAlignVertical: 'top'
-              }]}
-              placeholder="Description"
-              placeholderTextColor={currentTheme.textSecondary}
-              value={description}
-              onChangeText={setDescription}
-              multiline
-            />
-
-            <TextInput
-              style={[{
-                backgroundColor: currentTheme.background,
-                borderRadius: 12,
-                padding: 16,
-                marginBottom: 16,
-                borderWidth: 1,
-                borderColor: currentTheme.border,
-                color: currentTheme.text
-              }]}
-              placeholder="Location where lost/found"
-              placeholderTextColor={currentTheme.textSecondary}
-              value={location}
-              onChangeText={setLocation}
-            />
-
-            {/* Category Picker */}
-            <Text style={[{ color: currentTheme.text, fontWeight: 'bold', marginBottom: 12 }]}>
-              Category:
-            </Text>
-            <View style={[{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 20 }]}>
-              {categories.map((cat) => (
-                <TouchableOpacity
-                  key={cat.value}
-                  style={[{
-                    backgroundColor: category === cat.value ? currentTheme.primary : currentTheme.background,
-                    borderRadius: 20,
-                    paddingHorizontal: 16,
-                    paddingVertical: 8,
-                    borderWidth: 1,
-                    borderColor: currentTheme.border
-                  }]}
-                  onPress={() => setCategory(cat.value)}
-                >
-                  <Text style={[{
-                    color: category === cat.value ? currentTheme.background : currentTheme.text,
-                    fontSize: 14,
-                    fontWeight: category === cat.value ? 'bold' : 'normal'
-                  }]}>
-                    {cat.label}
+              onPress={generateAIDescription}
+              disabled={loadingAI}
+            >
+              {loadingAI ? (
+                <>
+                  <ActivityIndicator size="small" color="white" />
+                  <Text style={[{ color: 'white', fontWeight: 'bold', marginTop: 8 }]}>
+                    Generating AI Enhancement...
                   </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
+                </>
+              ) : (
+                <Text style={[{ color: 'white', fontSize: 16, fontWeight: 'bold' }]}>
+                  🤖 Enhance with AI
+                </Text>
+              )}
+            </TouchableOpacity>
 
-            <View style={[{ flexDirection: 'row', gap: 12 }]}>
-              <TouchableOpacity
-                style={[{ backgroundColor: currentTheme.border, borderRadius: 12, padding: 16, flex: 1 }]}
-                onPress={() => setShowReportModal(false)}
-              >
-                <Text style={[{ color: currentTheme.text, textAlign: 'center', fontWeight: 'bold' }]}>
-                  Cancel
+            {/* AI Enhancement Results */}
+            {aiEnhancement && (
+              <View style={[{ backgroundColor: currentTheme.surface, borderRadius: 12, padding: 16, marginBottom: 20 }]}>
+                <Text style={[{ fontSize: 16, fontWeight: 'bold', color: currentTheme.primary, marginBottom: 12 }]}>
+                  🤖 AI Enhancement Results
                 </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[{ backgroundColor: currentTheme.primary, borderRadius: 12, padding: 16, flex: 1 }]}
-                onPress={reportItem}
-              >
-                <Text style={[{ color: currentTheme.background, textAlign: 'center', fontWeight: 'bold' }]}>
-                  Report Item
-                </Text>
-              </TouchableOpacity>
-            </View>
+                
+                {aiEnhancement.enhancedDescription && (
+                  <View style={[{ marginBottom: 16 }]}>
+                    <Text style={[{ fontWeight: 'bold', color: currentTheme.text, marginBottom: 4 }]}>
+                      Enhanced Description:
+                    </Text>
+                    <Text style={[{ color: currentTheme.text, fontSize: 14 }]}>
+                      {aiEnhancement.enhancedDescription}
+                    </Text>
+                  </View>
+                )}
+
+                {aiEnhancement.searchSuggestions && (
+                  <View style={[{ marginBottom: 16 }]}>
+                    <Text style={[{ fontWeight: 'bold', color: currentTheme.text, marginBottom: 4 }]}>
+                      Suggested Search Locations:
+                    </Text>
+                    {aiEnhancement.searchSuggestions.map((location, index) => (
+                      <Text key={index} style={[{ color: currentTheme.text, fontSize: 14, marginLeft: 8 }]}>
+                        • {location}
+                      </Text>
+                    ))}
+                  </View>
+                )}
+
+                {aiEnhancement.recoverTips && (
+                  <View>
+                    <Text style={[{ fontWeight: 'bold', color: currentTheme.text, marginBottom: 4 }]}>
+                      Recovery Tips:
+                    </Text>
+                    {aiEnhancement.recoverTips.map((tip, index) => (
+                      <Text key={index} style={[{ color: currentTheme.text, fontSize: 14, marginLeft: 8 }]}>
+                        • {tip}
+                      </Text>
+                    ))}
+                  </View>
+                )}
+              </View>
+            )}
           </View>
         </View>
       </Modal>
