@@ -25,6 +25,15 @@ import ProfessorReviewsScreen from './src/screens/ProfessorReviewsScreen';
 import GradeCelebrationsScreen from './src/screens/GradeCelebrationsScreen';
 import TutoringMarketplaceScreen from './src/screens/TutoringMarketplaceScreen';
 
+// College Lifestyle Features
+import PartySafetyScreen from './src/screens/PartySafetyScreen';
+import RideSharingScreen from './src/screens/RideSharingScreen';
+import FoodDeliveryGroupsScreen from './src/screens/FoodDeliveryGroupsScreen';
+import LostAndFoundScreen from './src/screens/LostAndFoundScreen';
+
+// Mental Health & Wellness
+import MentalHealthScreen from './src/screens/MentalHealthScreen';
+
 // Import debug components
 import DebugAccountSwitcher from './src/components/DebugAccountSwitcher';
 
@@ -130,6 +139,15 @@ function AppNavigator() {
             <Stack.Screen name="ProfessorReviews" component={ProfessorReviewsScreen} />
             <Stack.Screen name="GradeCelebrations" component={GradeCelebrationsScreen} />
             <Stack.Screen name="TutoringMarketplace" component={TutoringMarketplaceScreen} />
+            
+            {/* College Lifestyle Features */}
+            <Stack.Screen name="PartySafety" component={PartySafetyScreen} />
+            <Stack.Screen name="RideSharing" component={RideSharingScreen} />
+            <Stack.Screen name="FoodDeliveryGroups" component={FoodDeliveryGroupsScreen} />
+            <Stack.Screen name="LostAndFound" component={LostAndFoundScreen} />
+            
+            {/* Mental Health & Wellness */}
+            <Stack.Screen name="MentalHealth" component={MentalHealthScreen} />
           </>
         ) : (
           // Authentication screens
