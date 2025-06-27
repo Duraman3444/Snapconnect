@@ -877,12 +877,12 @@ export default function CameraScreen({ navigation }) {
         const deltaY = (gestureState.dy / screenHeight) * 100;
         
         // Calculate new position based on initial position + gesture delta
-        // More conservative bounds to account for text centering transform
-        const newX = Math.max(20, Math.min(80, initialTextPosition.current.x + deltaX));
-        const newY = Math.max(25, Math.min(75, initialTextPosition.current.y + deltaY));
+        // Bounds to keep text fully on screen (accounting for text container size)
+        const newX = Math.max(15, Math.min(85, initialTextPosition.current.x + deltaX));
+        const newY = Math.max(15, Math.min(85, initialTextPosition.current.y + deltaY));
         
         setTextPosition({ x: newX, y: newY });
-        console.log(`📍 Text position: x=${newX.toFixed(1)}%, y=${newY.toFixed(1)}%`);
+        console.log(`📍 Text position: x=${newX.toFixed(1)}%, y=${newY.toFixed(1)}% | Pixel: left=${((screenWidth * newX / 100) - 50).toFixed(0)}px, top=${((screenHeight * newY / 100) - 25).toFixed(0)}px`);
       },
       onPanResponderRelease: () => {
         setIsDraggingText(false);
@@ -920,9 +920,8 @@ export default function CameraScreen({ navigation }) {
             <View
               style={{
                 position: 'absolute',
-                left: `${textPosition.x}%`,
-                top: `${textPosition.y}%`,
-                transform: [{ translateX: -50 }, { translateY: -50 }],
+                left: (screenWidth * textPosition.x / 100) - 50, // Convert percentage to pixels and center
+                top: (Dimensions.get('window').height * textPosition.y / 100) - 25, // Convert percentage to pixels and center
               }}
               {...textDragResponder.panHandlers}
             >
@@ -939,8 +938,8 @@ export default function CameraScreen({ navigation }) {
                   borderWidth: isDraggingText ? 2 : 0,
                   borderColor: '#6B46C1',
                   borderStyle: isDraggingText ? 'dashed' : 'solid',
-                  minWidth: 50,
-                  minHeight: 30,
+                  minWidth: 100,
+                  minHeight: 50,
                   justifyContent: 'center',
                   alignItems: 'center',
                 }}
