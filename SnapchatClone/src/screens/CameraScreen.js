@@ -10,6 +10,7 @@ import { useAuth } from '../context/SupabaseAuthContext';
 import { useTheme } from '../context/ThemeContext';
 import ragService from '../services/ragService';
 import userProfileService from '../services/userProfileService';
+import ViewShot from 'react-native-view-shot';
 
 // Updated function to find the most recent FILE of any type, with extensive logging.
 const findMostRecentFile = async (directory) => {
@@ -63,8 +64,16 @@ export default function CameraScreen({ navigation }) {
   const [uploading, setUploading] = useState(false);
   const [showActionModal, setShowActionModal] = useState(false);
   const [friends, setFriends] = useState([]);
+  
+  // Photo editing states
+  const [showPhotoEditor, setShowPhotoEditor] = useState(false);
+  const [selectedFilter, setSelectedFilter] = useState(0);
+  const [textOverlay, setTextOverlay] = useState('');
+  const [showTextInput, setShowTextInput] = useState(false);
+  const [textPosition, setTextPosition] = useState({ x: 50, y: 20 }); // percentage positions
   const cameraRef = useRef();
   const recordingTimerRef = useRef(null);
+  const photoEditorRef = useRef();
   const { currentUser, logout, supabase } = useAuth();
   const { currentTheme } = useTheme();
   
@@ -76,6 +85,17 @@ export default function CameraScreen({ navigation }) {
   const [customCaption, setCustomCaption] = useState('');
   
   const wasRecording = useRef(false);
+
+  // Color filters for photo editing
+  const colorFilters = [
+    { name: 'Normal', filter: 'none', style: {} },
+    { name: 'Warm', filter: 'sepia', style: { tintColor: '#FFA500' } },
+    { name: 'Cool', filter: 'hue-rotate', style: { tintColor: '#87CEEB' } },
+    { name: 'Vintage', filter: 'sepia', style: { tintColor: '#8B4513', opacity: 0.8 } },
+    { name: 'B&W', filter: 'grayscale', style: { tintColor: '#808080' } },
+    { name: 'Vibrant', filter: 'saturate', style: { tintColor: '#FF69B4' } },
+    { name: 'Dark', filter: 'brightness', style: { tintColor: '#2F2F2F', opacity: 0.7 } }
+  ];
 
   useEffect(() => {
     const showVideoWarning = async () => {
@@ -278,7 +298,8 @@ export default function CameraScreen({ navigation }) {
             const photoData = await cameraRef.current.takePictureAsync();
             setPhoto(photoData);
             setVideo(null);
-            setShowActionModal(true);
+            setShowPhotoEditor(true);
+            setShowActionModal(false);
         } catch (error) {
             console.error("❌ Failed to take picture", error);
             Alert.alert('Error', 'Could not take picture.');
@@ -290,11 +311,16 @@ export default function CameraScreen({ navigation }) {
     setPhoto(null);
     setVideo(null);
     setShowActionModal(false);
+    setShowPhotoEditor(false);
     setUploading(false);
     setRagCaptions([]);
     setSelectedCaption('');
     setShowCaptionModal(false);
     setCustomCaption('');
+    setTextOverlay('');
+    setShowTextInput(false);
+    setSelectedFilter(0);
+    setTextPosition({ x: 50, y: 20 });
   };
 
   // RAG Feature #1: Smart Caption Generation
@@ -473,6 +499,46 @@ export default function CameraScreen({ navigation }) {
     setPhoto(null);
     setVideo(null);
     setShowActionModal(false);
+    setShowPhotoEditor(false);
+  };
+
+  // Photo editing functions
+  const handleFilterSwipe = (direction) => {
+    if (direction === 'left') {
+      setSelectedFilter((prev) => (prev + 1) % colorFilters.length);
+    } else if (direction === 'right') {
+      setSelectedFilter((prev) => (prev - 1 + colorFilters.length) % colorFilters.length);
+    }
+  };
+
+  const proceedToShare = async () => {
+    try {
+      // Capture the edited photo with filters and text
+      console.log('📸 Capturing edited photo...');
+      const uri = await photoEditorRef.current.capture('file', {
+        format: 'jpg',
+        quality: 0.9,
+      });
+      
+      console.log('📸 Captured edited photo:', uri);
+      
+      // Update the photo with the edited version
+      setPhoto({
+        uri: uri,
+        width: photo.width || 1080,
+        height: photo.height || 1920
+      });
+      
+      // Proceed to sharing
+      setShowPhotoEditor(false);
+      setShowActionModal(true);
+    } catch (error) {
+      console.error('❌ Error capturing edited photo:', error);
+      Alert.alert('Error', 'Failed to apply edits. Proceeding with original photo.');
+      // Fallback to original photo
+      setShowPhotoEditor(false);
+      setShowActionModal(true);
+    }
   };
 
   const toggleCameraFacing = () => {
@@ -580,7 +646,8 @@ export default function CameraScreen({ navigation }) {
             width: selectedImage.width || 1080,
             height: selectedImage.height || 1920
           });
-          setShowActionModal(true);
+          setShowPhotoEditor(true);
+          setShowActionModal(false);
           console.log('📁 Photo set successfully');
         } else {
           console.error('📁 No URI in selected image');
@@ -657,7 +724,8 @@ export default function CameraScreen({ navigation }) {
             width: assetInfo.width || 1080,
             height: assetInfo.height || 1920
           });
-          setShowActionModal(true);
+          setShowPhotoEditor(true);
+          setShowActionModal(false);
           console.log('📁 Photo loaded successfully from MediaLibrary');
           
           Alert.alert(
@@ -691,7 +759,8 @@ export default function CameraScreen({ navigation }) {
         width: 1080,
         height: 1920
       });
-      setShowActionModal(true);
+      setShowPhotoEditor(true);
+      setShowActionModal(false);
       console.log('📁 Test photo loaded successfully');
       
       Alert.alert(
@@ -721,6 +790,154 @@ export default function CameraScreen({ navigation }) {
         >
           <Text style={[{ fontWeight: '600' }, { color: currentTheme.background }]}>Grant Permission</Text>
         </TouchableOpacity>
+      </View>
+    );
+  }
+
+  // Photo Editor Screen
+  if (photo && showPhotoEditor) {
+    const filterPanResponder = PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: (_, gestureState) => {
+        return Math.abs(gestureState.dx) > Math.abs(gestureState.dy) && Math.abs(gestureState.dx) > 20;
+      },
+      onPanResponderRelease: (_, gestureState) => {
+        const { dx } = gestureState;
+        const swipeThreshold = screenWidth * 0.15;
+        
+        if (Math.abs(dx) > swipeThreshold) {
+          if (dx > 0) {
+            handleFilterSwipe('right');
+          } else {
+            handleFilterSwipe('left');
+          }
+        }
+      },
+    });
+
+    return (
+      <View style={{ flex: 1, backgroundColor: 'black' }} {...filterPanResponder.panHandlers}>
+        {/* ViewShot component to capture the edited photo */}
+        <ViewShot 
+          ref={photoEditorRef}
+          options={{ format: "jpg", quality: 0.9 }}
+          style={{ flex: 1 }}
+        >
+          {/* Photo with current filter overlay */}
+          <View style={{ flex: 1, position: 'relative' }}>
+            <Image source={{ uri: photo.uri }} style={{ flex: 1, width: '100%', height: '100%' }} resizeMode="cover" />
+            
+            {/* Filter overlay */}
+            {selectedFilter > 0 && (
+              <View 
+                style={[
+                  StyleSheet.absoluteFillObject,
+                  {
+                    backgroundColor: colorFilters[selectedFilter].style.tintColor || 'transparent',
+                    opacity: colorFilters[selectedFilter].style.opacity || 0.3,
+                    mixBlendMode: colorFilters[selectedFilter].filter === 'grayscale' ? 'multiply' : 'normal'
+                  }
+                ]} 
+              />
+            )}
+            
+            {/* Text overlay */}
+            {textOverlay && (
+              <View 
+                style={{
+                  position: 'absolute',
+                  left: `${textPosition.x}%`,
+                  top: `${textPosition.y}%`,
+                  transform: [{ translateX: -50 }, { translateY: -50 }],
+                }}
+              >
+                <Text 
+                  style={{
+                    color: 'white',
+                    fontSize: 24,
+                    fontWeight: 'bold',
+                    textAlign: 'center',
+                    textShadowColor: 'rgba(0, 0, 0, 0.75)',
+                    textShadowOffset: { width: -1, height: 1 },
+                    textShadowRadius: 10,
+                    paddingHorizontal: 10,
+                    paddingVertical: 5,
+                  }}
+                >
+                  {textOverlay}
+                </Text>
+              </View>
+            )}
+          </View>
+        </ViewShot>
+
+        {/* Top controls */}
+        <View style={styles.photoEditorTopBar}>
+          <TouchableOpacity
+            style={styles.photoEditorButton}
+            onPress={retakePhoto}
+          >
+            <Text style={styles.photoEditorButtonText}>✕</Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity
+            style={[styles.photoEditorButton, { backgroundColor: showTextInput ? '#6B46C1' : 'rgba(255, 255, 255, 0.2)' }]}
+            onPress={() => setShowTextInput(!showTextInput)}
+          >
+            <Text style={styles.photoEditorButtonText}>Aa</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Filter indicator */}
+        <View style={styles.filterIndicator}>
+          <Text style={styles.filterName}>{colorFilters[selectedFilter].name}</Text>
+          <View style={styles.filterDots}>
+            {colorFilters.map((_, index) => (
+              <View
+                key={index}
+                style={[
+                  styles.filterDot,
+                  selectedFilter === index && styles.filterDotActive
+                ]}
+              />
+            ))}
+          </View>
+          <Text style={styles.swipeHint}>← Swipe for filters →</Text>
+        </View>
+
+        {/* Text input overlay */}
+        {showTextInput && (
+          <View style={styles.textInputOverlay}>
+            <TextInput
+              style={styles.textInput}
+              placeholder="Add text..."
+              placeholderTextColor="rgba(255, 255, 255, 0.7)"
+              value={textOverlay}
+              onChangeText={setTextOverlay}
+              multiline={true}
+              textAlign="center"
+              autoFocus={true}
+              onSubmitEditing={() => setShowTextInput(false)}
+            />
+          </View>
+        )}
+
+        {/* Bottom controls */}
+        <View style={styles.photoEditorBottomBar}>
+          <TouchableOpacity
+            style={[styles.photoEditorButton, { backgroundColor: 'rgba(255, 255, 255, 0.2)' }]}
+            onPress={retakePhoto}
+          >
+            <Text style={styles.photoEditorButtonText}>🔄</Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity
+            style={[styles.photoEditorButton, { backgroundColor: '#6B46C1', paddingHorizontal: 30 }]}
+            onPress={proceedToShare}
+          >
+            <Text style={[styles.photoEditorButtonText, { fontSize: 16 }]}>Done</Text>
+          </TouchableOpacity>
+        </View>
       </View>
     );
   }
@@ -1489,5 +1706,93 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
     justifyContent: 'center',
     alignItems: 'center',
+  },
+
+  // Photo Editor Styles
+  photoEditorTopBar: {
+    position: 'absolute',
+    top: 50,
+    left: 20,
+    right: 20,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    zIndex: 10,
+  },
+  photoEditorBottomBar: {
+    position: 'absolute',
+    bottom: 60,
+    left: 20,
+    right: 20,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    zIndex: 10,
+  },
+  photoEditorButton: {
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    borderRadius: 25,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  photoEditorButtonText: {
+    color: 'white',
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  filterIndicator: {
+    position: 'absolute',
+    bottom: 160,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    zIndex: 10,
+  },
+  filterName: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginBottom: 8,
+    textShadowColor: 'rgba(0, 0, 0, 0.75)',
+    textShadowOffset: { width: -1, height: 1 },
+    textShadowRadius: 10,
+  },
+  filterDots: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    marginBottom: 5,
+  },
+  filterDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: 'rgba(255, 255, 255, 0.4)',
+    marginHorizontal: 3,
+  },
+  filterDotActive: {
+    backgroundColor: 'white',
+  },
+  swipeHint: {
+    color: 'rgba(255, 255, 255, 0.7)',
+    fontSize: 12,
+    textAlign: 'center',
+  },
+  textInputOverlay: {
+    position: 'absolute',
+    bottom: 200,
+    left: 20,
+    right: 20,
+    zIndex: 15,
+  },
+  textInput: {
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    color: 'white',
+    fontSize: 18,
+    padding: 15,
+    borderRadius: 10,
+    textAlign: 'center',
+    maxHeight: 100,
   },
 }); 
