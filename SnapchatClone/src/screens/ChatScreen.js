@@ -16,6 +16,10 @@ import { Video } from 'expo-av';
 import { useAuth } from '../context/SupabaseAuthContext';
 import { useTheme } from '../context/ThemeContext';
 import ImageWithFallback from '../components/ImageWithFallback';
+import AIAssistant from '../components/AIAssistant';
+import FloatingAIButton from '../components/FloatingAIButton';
+import ragService from '../services/ragService';
+import userProfileService from '../services/userProfileService';
 
 const { width: screenWidth } = Dimensions.get('window');
 
@@ -27,6 +31,13 @@ export default function ChatScreen({ navigation, route }) {
   const [sending, setSending] = useState(false);
   const [ephemeralMode, setEphemeralMode] = useState(true); // Default to ephemeral like Snapchat
   const [groupParticipants, setGroupParticipants] = useState([]);
+  
+  // AI-related state
+  const [showAIAssistant, setShowAIAssistant] = useState(false);
+  const [aiSuggestions, setAiSuggestions] = useState([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [userProfile, setUserProfile] = useState({});
+  
   const { currentUser, supabase } = useAuth();
   const { currentTheme } = useTheme();
   const flatListRef = useRef();
@@ -52,6 +63,7 @@ export default function ChatScreen({ navigation, route }) {
 
     loadMessages();
     markMessagesAsRead();
+    loadUserProfile();
     
     // Load group participants if this is a group chat
     if (isGroup) {
@@ -184,6 +196,43 @@ export default function ChatScreen({ navigation, route }) {
     }, 1000);
     
     messageTimers.current.set(message.id, timer);
+  };
+
+  // Load user profile for AI personalization
+  const loadUserProfile = async () => {
+    try {
+      const profile = await userProfileService.getUserProfile(currentUser.id);
+      setUserProfile(profile || {});
+    } catch (error) {
+      console.error('Error loading user profile:', error);
+    }
+  };
+
+  // Generate AI message suggestions
+  const generateAISuggestions = async () => {
+    try {
+      const recentMessages = messages.slice(-5).map(m => m.content);
+      const conversationContext = {
+        recentMessages,
+        chatType: isGroup ? 'group' : 'individual',
+        relationship: 'friend',
+        context: 'casual',
+        mood: 'friendly'
+      };
+
+      const result = await ragService.generateMessageSuggestions(conversationContext, userProfile);
+      setAiSuggestions(result.suggestions);
+      setShowSuggestions(true);
+    } catch (error) {
+      console.error('Error generating AI suggestions:', error);
+    }
+  };
+
+  // Handle AI suggestion selection
+  const handleAISuggestionSelect = (suggestion) => {
+    setNewMessage(suggestion);
+    setShowSuggestions(false);
+    setShowAIAssistant(false);
   };
 
   const loadMessages = async () => {
@@ -1011,6 +1060,31 @@ export default function ChatScreen({ navigation, route }) {
             blurOnSubmit={false}
           />
         </View>
+
+        {/* AI Suggestions Button */}
+        <TouchableOpacity
+          onPress={generateAISuggestions}
+          style={[{
+            backgroundColor: '#4A90E2',
+            borderRadius: 22,
+            width: 44,
+            height: 44,
+            justifyContent: 'center',
+            alignItems: 'center',
+            marginRight: 8,
+            shadowColor: '#4A90E2',
+            shadowOffset: { width: 0, height: 2 },
+            shadowOpacity: 0.6,
+            shadowRadius: 4,
+            elevation: 6,
+          }]}
+        >
+          <Text style={[{
+            fontSize: 18
+          }]}>
+            🤖
+          </Text>
+        </TouchableOpacity>
         
         <TouchableOpacity
           onPress={sendMessage}
@@ -1034,6 +1108,85 @@ export default function ChatScreen({ navigation, route }) {
           </Text>
         </TouchableOpacity>
       </View>
+
+      {/* AI Suggestions Quick Bar */}
+      {showSuggestions && aiSuggestions.length > 0 && (
+        <View style={[{
+          backgroundColor: currentTheme.surface,
+          paddingVertical: 8,
+          paddingHorizontal: 16,
+          borderTopWidth: 1,
+          borderTopColor: currentTheme.border,
+          paddingBottom: Platform.OS === 'ios' ? 34 : 8,
+        }]}>
+          <ScrollView 
+            horizontal 
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={{ paddingHorizontal: 8 }}
+          >
+            {aiSuggestions.map((suggestion, index) => (
+              <TouchableOpacity
+                key={index}
+                onPress={() => handleAISuggestionSelect(suggestion)}
+                style={[{
+                  backgroundColor: '#4A90E2',
+                  paddingHorizontal: 16,
+                  paddingVertical: 8,
+                  borderRadius: 20,
+                  marginHorizontal: 4,
+                  maxWidth: screenWidth * 0.7
+                }]}
+              >
+                <Text style={[{
+                  color: 'white',
+                  fontSize: 14,
+                  fontWeight: '600'
+                }]}>
+                  {suggestion}
+                </Text>
+              </TouchableOpacity>
+            ))}
+            <TouchableOpacity
+              onPress={() => setShowSuggestions(false)}
+              style={[{
+                backgroundColor: currentTheme.textSecondary,
+                paddingHorizontal: 12,
+                paddingVertical: 8,
+                borderRadius: 20,
+                marginHorizontal: 4,
+              }]}
+            >
+              <Text style={[{
+                color: 'white',
+                fontSize: 14,
+                fontWeight: '600'
+              }]}>
+                ✕
+              </Text>
+            </TouchableOpacity>
+          </ScrollView>
+        </View>
+      )}
+
+      {/* Floating AI Assistant Button */}
+      <FloatingAIButton
+        onPress={() => setShowAIAssistant(true)}
+        visible={!showSuggestions}
+      />
+
+      {/* AI Assistant Modal */}
+      <AIAssistant
+        visible={showAIAssistant}
+        onClose={() => setShowAIAssistant(false)}
+        context="messaging"
+        onSuggestionSelect={handleAISuggestionSelect}
+        userProfile={userProfile}
+        conversationData={{
+          messages,
+          chatType: isGroup ? 'group' : 'individual',
+          relationship: 'friend'
+        }}
+      />
     </KeyboardAvoidingView>
   );
 } 

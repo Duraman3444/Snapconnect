@@ -19,6 +19,16 @@ export default function MentalHealthScreen({ navigation }) {
 
   const stressLevels = Array.from({ length: 10 }, (_, i) => i + 1);
 
+  // Define moods array that was missing
+  const moods = [
+    { value: 'terrible', emoji: '😭', color: '#dc2626' },
+    { value: 'bad', emoji: '😞', color: '#ea580c' },
+    { value: 'okay', emoji: '😐', color: '#ca8a04' },
+    { value: 'good', emoji: '😊', color: '#16a34a' },
+    { value: 'great', emoji: '😄', color: '#2563eb' },
+    { value: 'amazing', emoji: '🤩', color: '#9333ea' }
+  ];
+
   const wellnessChallenges = [
     {
       id: 1,

@@ -3,7 +3,10 @@ import { v4 as uuidv4 } from 'uuid';
 
 class CollegeRAGService {
   constructor() {
-    this.openaiApiKey = process.env.EXPO_PUBLIC_OPENAI_API_KEY;
+    // Try multiple ways to get the API key
+    this.openaiApiKey = process.env.EXPO_PUBLIC_OPENAI_API_KEY || 
+                       process.env.OPENAI_API_KEY ||
+                       'sk-proj-df1PHhbycPVpSmzWZXnpgW7Xun2h208PpoF3qcR21CdklAFFGalK6zyBZ5v4Y2N4p_3pdqkaBPT3BlbkF3w8eZXzt+Fpj09Sls79mLUnrwskI0MMQG5DFBROLoPh665oxvb';
     this.userContext = {};
     this.knowledgeBase = {
       campusEvents: [],
@@ -565,6 +568,144 @@ Return as JSON:
     } catch (error) {
       console.error('Error generating safety recommendations:', error);
       return null;
+    }
+  }
+
+  // 13. Smart Message Suggestions for Chat
+  async generateMessageSuggestions(conversationContext, userProfile = {}) {
+    try {
+      const prompt = `
+You are an AI assistant helping college students with conversation suggestions.
+
+Conversation Context:
+- Recent Messages: ${(conversationContext.recentMessages || []).slice(-3).join(', ')}
+- Chat Type: ${conversationContext.chatType || 'friend'}
+- Relationship: ${conversationContext.relationship || 'friend'}
+- Context: ${conversationContext.context || 'casual'}
+- Mood: ${conversationContext.mood || 'friendly'}
+
+Student Profile:
+- Major: ${userProfile.major || 'Unknown'}
+- Interests: ${(userProfile.interests || []).join(', ') || 'General'}
+- Personality: ${userProfile.personality || 'friendly'}
+
+Generate 3 different message suggestions:
+1. Casual/Fun response
+2. Thoughtful/Engaging response  
+3. Question/Conversation starter
+
+Each suggestion should:
+- Be natural and authentic
+- Match the conversation flow
+- Be appropriate for college students
+- Include emojis when appropriate
+- Be under 100 characters
+
+Return as JSON: {"casual": "...", "thoughtful": "...", "question": "..."}`;
+
+      const response = await this.callOpenAI(prompt);
+      const result = this.parseJSONResponse(response);
+      
+      return {
+        suggestions: [
+          result.casual || "Sounds good! 😊",
+          result.thoughtful || "That's really interesting!",
+          result.question || "What do you think about...?"
+        ],
+        context: conversationContext.context,
+        timestamp: Date.now()
+      };
+    } catch (error) {
+      console.error('Error generating message suggestions:', error);
+      return {
+        suggestions: [
+          "That's awesome! 😄",
+          "I totally get that!",
+          "Tell me more about that!"
+        ]
+      };
+    }
+  }
+
+  // 14. Smart Caption Enhancement for Messages
+  async enhanceMessageWithContext(message, conversationContext = {}) {
+    try {
+      const prompt = `
+You are an AI assistant helping enhance messages with smart context.
+
+Original Message: "${message}"
+Conversation Context: ${conversationContext.topic || 'general chat'}
+Relationship: ${conversationContext.relationship || 'friend'}
+Current Mood: ${conversationContext.mood || 'neutral'}
+
+Enhance this message to be more engaging while keeping the original meaning:
+- Add appropriate emojis
+- Make it more conversational
+- Keep it authentic to college students
+- Don't change the core message
+- Keep it under 200 characters
+
+Return just the enhanced message, no JSON.`;
+
+      const response = await this.callOpenAI(prompt);
+      return response.trim();
+    } catch (error) {
+      console.error('Error enhancing message:', error);
+      return message; // Return original if enhancement fails
+    }
+  }
+
+  // 15. Conversation Analysis and Mood Detection
+  async analyzeConversation(messages = [], userProfile = {}) {
+    try {
+      const recentMessages = messages.slice(-10).map(m => 
+        `${m.sender_name || 'User'}: ${m.content}`
+      ).join('\n');
+
+      const prompt = `
+Analyze this college student conversation for mood, topics, and suggestions.
+
+Recent Messages:
+${recentMessages}
+
+Student Profile: ${JSON.stringify(userProfile)}
+
+Analyze and return insights as JSON:
+{
+  "mood": "happy/excited/stressed/worried/neutral/etc",
+  "topics": ["topic1", "topic2"],
+  "energy": "high/medium/low",
+  "suggestions": {
+    "conversation": ["suggestion1", "suggestion2"],
+    "activities": ["activity1", "activity2"],
+    "support": "any support needed"
+  },
+  "insights": "brief insight about the conversation"
+}`;
+
+      const response = await this.callOpenAI(prompt);
+      const result = this.parseJSONResponse(response);
+      
+      return {
+        analysis: result,
+        timestamp: Date.now(),
+        messageCount: messages.length
+      };
+    } catch (error) {
+      console.error('Error analyzing conversation:', error);
+      return {
+        analysis: {
+          mood: 'neutral',
+          topics: ['general'],
+          energy: 'medium',
+          suggestions: {
+            conversation: ['Keep the conversation going!'],
+            activities: ['Maybe plan something fun together'],
+            support: 'Looking good!'
+          },
+          insights: 'Having a great conversation!'
+        }
+      };
     }
   }
 
