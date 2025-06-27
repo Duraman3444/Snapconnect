@@ -39,12 +39,22 @@ export default function AIAssistant({
 
     setLoading(true);
     try {
-      // Use the RAG service to get AI response
-      const aiResponse = await ragService.getAIResponse(query, currentUser?.id);
+      // Create detailed screen context for enhanced AI responses
+      const screenContext = {
+        screen: context,
+        activity: context === 'messaging' ? 'chatting' : 
+                context === 'camera' ? 'taking_photos' :
+                context === 'home' ? 'browsing_app' : 'general_usage',
+        location: 'campus',
+        conversationContext: conversationData
+      };
+
+      // Use the enhanced RAG service to get AI response with context
+      const aiResponse = await ragService.getAIResponse(query, currentUser?.id, screenContext);
       setResponse(aiResponse);
       
-      // Generate conversation suggestions based on the query and response
-      const conversationSuggestions = generateConversationSuggestions(query, aiResponse);
+      // Generate enhanced conversation suggestions based on the query, response, and context
+      const conversationSuggestions = await generateEnhancedConversationSuggestions(query, aiResponse);
       setSuggestions(conversationSuggestions);
     } catch (error) {
       console.error('AI Assistant Error:', error);
@@ -55,14 +65,52 @@ export default function AIAssistant({
     }
   };
 
-  const generateConversationSuggestions = (userQuery, aiResponse) => {
-    // Generate contextual conversation starters based on the AI interaction
+  const generateEnhancedConversationSuggestions = async (userQuery, aiResponse) => {
+    try {
+      // Create enhanced conversation context
+      const conversationContext = {
+        recentMessages: (conversationData.messages || []).slice(-5).map(msg => msg.content || msg),
+        chatType: conversationData.chatType || 'individual',
+        relationship: conversationData.relationship || 'friend',
+        mood: 'friendly',
+        context: context,
+        userQuery: userQuery,
+        aiResponse: aiResponse
+      };
+
+      // Create screen context
+      const screenContext = {
+        screen: context,
+        activity: context === 'messaging' ? 'using_ai_assistant' : 'getting_suggestions'
+      };
+
+      // Use the enhanced AI service to generate contextual suggestions
+      const result = await ragService.generateMessageSuggestions(
+        conversationContext, 
+        userProfile, 
+        screenContext
+      );
+      
+      return result.suggestions || [
+        'That sounds interesting!',
+        'Tell me more about that',
+        'How are you feeling about it?',
+        'Want to chat about it?'
+      ];
+    } catch (error) {
+      console.error('Error generating enhanced suggestions:', error);
+      // Fallback to basic suggestions if AI fails
+      return generateBasicConversationSuggestions(userQuery);
+    }
+  };
+
+  const generateBasicConversationSuggestions = (userQuery) => {
+    // Fallback function with basic logic
     const suggestions = [];
     
     // Consider conversation context and user profile
     const recentMessages = conversationData.messages || [];
     const chatType = conversationData.chatType || 'individual';
-    const relationship = conversationData.relationship || 'friend';
     
     if (userQuery.toLowerCase().includes('study') || userQuery.toLowerCase().includes('class')) {
       suggestions.push('Want to study together?');

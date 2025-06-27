@@ -75,7 +75,7 @@ export default function CameraScreen({ navigation }) {
   const cameraRef = useRef();
   const recordingTimerRef = useRef(null);
   const photoEditorRef = useRef();
-  const initialTextPosition = useRef({ pixelX: 0, pixelY: 0, startX: 0, startY: 0 });
+  const initialTextPosition = useRef({ startTouchX: 0, startTouchY: 0, startPercentX: 50, startPercentY: 40 });
   const { currentUser, logout, supabase } = useAuth();
   const { currentTheme } = useTheme();
   
@@ -124,7 +124,18 @@ export default function CameraScreen({ navigation }) {
   }, [video, showActionModal]);
 
   // Get screen dimensions for gesture detection
-  const screenWidth = Dimensions.get('window').width;
+  const reactNativeScreenWidth = Dimensions.get('window').width;
+  const reactNativeScreenHeight = Dimensions.get('window').height;
+  
+  // Your actual device dimensions (for proper drag calculations)
+  const actualScreenWidth = 2778;
+  const actualScreenHeight = 1284;
+  
+  // Use React Native dimensions for existing features, actual dimensions for drag
+  const screenWidth = reactNativeScreenWidth; // Keep existing swipe logic working
+  
+  console.log(`📱 React Native reports: ${reactNativeScreenWidth}x${reactNativeScreenHeight}`);
+  console.log(`📱 Your actual device: ${actualScreenWidth}x${actualScreenHeight}`);
   const swipeThreshold = screenWidth * 0.25; // 25% of screen width
 
   // Gesture handling for swipe navigation
@@ -326,28 +337,59 @@ export default function CameraScreen({ navigation }) {
     setIsDraggingText(false);
   };
 
-  // RAG Feature #1: Smart Caption Generation
+  // RAG Feature #1: Enhanced Smart Caption Generation with Context
   const generateRAGCaptions = async (imageContext = 'photo') => {
     setIsGeneratingCaptions(true);
     try {
       // Get user profile for personalization
       const userProfile = await userProfileService.getMockUserProfile(currentUser.id);
       
-      console.log('🤖 Generating RAG captions for:', imageContext);
-      const result = await ragService.generateSmartCaption(imageContext, userProfile);
+      // Create enhanced screen context
+      const screenContext = {
+        screen: 'camera',
+        activity: 'photo_taken',
+        photoType: photo ? 'captured_photo' : 'imported_photo',
+        location: 'campus',
+        useCase: 'caption_generation'
+      };
+
+      // Enhance image context with more details
+      const enhancedImageContext = {
+        type: 'photo',
+        source: photo ? 'camera_capture' : 'imported',
+        context: imageContext,
+        description: `College student taking a ${imageContext} on campus`,
+        setting: 'campus_environment',
+        purpose: 'social_sharing'
+      };
+      
+      console.log('🤖 Generating enhanced RAG captions for:', enhancedImageContext);
+      const result = await ragService.generateSmartCaption(enhancedImageContext, userProfile, screenContext);
       
       setRagCaptions(result.suggestions);
       setShowCaptionModal(true);
-      console.log('✅ Generated captions:', result.suggestions);
+      console.log('✅ Generated enhanced captions:', result.suggestions);
+      
+      // Log contextual information if available
+      if (result.contextualNote) {
+        console.log('📋 Context Note:', result.contextualNote);
+      }
       
     } catch (error) {
       console.error('Error generating RAG captions:', error);
       Alert.alert('Caption Generation', 'Unable to generate smart captions. Please try again.');
-      // Fallback captions
+      // Enhanced fallback captions with time context
+      const currentTime = new Date();
+      const timeOfDay = currentTime.getHours() < 12 ? 'Morning' : 
+                      currentTime.getHours() < 17 ? 'Afternoon' : 
+                      currentTime.getHours() < 22 ? 'Evening' : 'Late Night';
+      
       setRagCaptions([
-        'College life! 📚✨',
-        'Making memories! 🎉',
-        'Another day, another adventure! 🌟'
+        `${timeOfDay} vibes on campus ✨`,
+        'Making memories that matter 🎉',
+        'Living my best college moments 🌟',
+        'Another chapter in the books 📖',
+        'Campus life captured 📸'
       ]);
       setShowCaptionModal(true);
     } finally {
@@ -514,34 +556,84 @@ export default function CameraScreen({ navigation }) {
     }
   };
 
-  // AI Caption generation for photo editor
+  // Enhanced AI Caption generation for photo editor with context
   const generateAICaptionForEditor = async () => {
     setIsGeneratingCaptions(true);
     try {
       // Get user profile for personalization
       const userProfile = await userProfileService.getMockUserProfile(currentUser.id);
       
-      console.log('🤖 Generating AI caption in editor...');
-      const result = await ragService.generateSmartCaption('photo', userProfile);
+      // Create detailed screen context for photo editing
+      const screenContext = {
+        screen: 'photo_editor',
+        activity: 'editing_photo',
+        photoType: 'captured_photo',
+        location: 'campus',
+        useCase: 'text_overlay',
+        editingTools: {
+          filter: selectedFilter > 0 ? colorFilters[selectedFilter].name : 'none',
+          hasExistingText: !!textOverlay
+        }
+      };
+
+      // Enhanced image context for editor
+      const enhancedImageContext = {
+        type: 'photo_being_edited',
+        source: 'camera_capture',
+        context: 'photo editing session',
+        description: 'College student editing a photo with filters and text overlays',
+        setting: 'photo_editor_environment',
+        purpose: 'social_media_post',
+        currentState: {
+          filterApplied: selectedFilter > 0,
+          hasText: !!textOverlay
+        }
+      };
       
-      // Set the first generated caption as text overlay
+      console.log('🤖 Generating enhanced AI caption in editor...');
+      const result = await ragService.generateSmartCaption(enhancedImageContext, userProfile, screenContext);
+      
+      // Choose the best caption from the generated options
       if (result.suggestions && result.suggestions.length > 0) {
-        setTextOverlay(result.suggestions[0]);
+        // Prefer casual or story-driven captions for text overlays
+        let bestCaption = result.suggestions[0];
+        
+        // If we have categories, prioritize casual or aesthetic captions for overlays
+        if (result.categories) {
+          const preferredCaption = 
+            (result.categories.casual && result.categories.casual[0]) ||
+            (result.categories.aesthetic && result.categories.aesthetic[0]) ||
+            result.suggestions[0];
+          bestCaption = preferredCaption;
+        }
+        
+        setTextOverlay(bestCaption);
         // Reset text position to center when new caption is generated
         setTextPosition({ x: 50, y: 40 });
-        console.log('✅ AI caption applied:', result.suggestions[0]);
+        console.log('✅ Enhanced AI caption applied:', bestCaption);
         
-        // Show success feedback
-        Alert.alert('AI Caption Generated! 🤖', `Caption: "${result.suggestions[0]}"\n\nTap the text on the photo to edit it, or tap "Aa" to change it.`);
+        // Enhanced success feedback with context
+        const contextInfo = result.contextualNote ? `\n\n💡 ${result.contextualNote}` : '';
+        Alert.alert(
+          'AI Caption Generated! 🤖', 
+          `Caption: "${bestCaption}"\n\nTap the text on the photo to edit it, or tap "Aa" to change it.${contextInfo}`
+        );
       }
       
     } catch (error) {
       console.error('Error generating AI caption:', error);
-      // Fallback captions
+      // Enhanced fallback captions with time and context awareness
+      const currentTime = new Date();
+      const timeOfDay = currentTime.getHours() < 12 ? 'Morning' : 
+                      currentTime.getHours() < 17 ? 'Afternoon' : 
+                      currentTime.getHours() < 22 ? 'Evening' : 'Late Night';
+      
       const fallbackCaptions = [
-        'College life! 📚✨',
-        'Making memories! 🎉',
-        'Another day, another adventure! 🌟'
+        `${timeOfDay} energy ✨`,
+        'Living the moment 🎉',
+        'Campus vibes 🌟',
+        'Making it count 💪',
+        'Story in progress 📖'
       ];
       const randomCaption = fallbackCaptions[Math.floor(Math.random() * fallbackCaptions.length)];
       setTextOverlay(randomCaption);
@@ -859,39 +951,37 @@ export default function CameraScreen({ navigation }) {
       },
     });
 
-    // Text drag handler with simplified approach
+    // Debug text drag handler with NO bounds checking
     const textDragResponder = PanResponder.create({
       onStartShouldSetPanResponder: () => true,
       onMoveShouldSetPanResponder: () => true,
       onPanResponderGrant: (event) => {
         setIsDraggingText(true);
-        // Store the initial pixel position when drag starts
-        const currentPixelX = (screenWidth * textPosition.x / 100) - 50;
-        const currentPixelY = (Dimensions.get('window').height * textPosition.y / 100) - 25;
+        // Store the absolute touch position when drag starts
         initialTextPosition.current = { 
-          pixelX: currentPixelX, 
-          pixelY: currentPixelY,
-          startX: event.nativeEvent.pageX,
-          startY: event.nativeEvent.pageY
+          startTouchX: event.nativeEvent.pageX,
+          startTouchY: event.nativeEvent.pageY,
+          startPercentX: textPosition.x,
+          startPercentY: textPosition.y
         };
-        console.log(`🎯 Drag started at: ${textPosition.x.toFixed(1)}%, ${textPosition.y.toFixed(1)}% (${currentPixelX}px, ${currentPixelY}px)`);
+        console.log(`🎯 DRAG START: Touch(${event.nativeEvent.pageX}, ${event.nativeEvent.pageY}) Position(${textPosition.x.toFixed(1)}%, ${textPosition.y.toFixed(1)}%)`);
+        console.log(`📱 USING ACTUAL DIMENSIONS: ${actualScreenWidth}x${actualScreenHeight} (RN reports: ${reactNativeScreenWidth}x${reactNativeScreenHeight})`);
       },
       onPanResponderMove: (event, gestureState) => {
-        // Calculate new pixel position directly from gesture
-        const newPixelX = initialTextPosition.current.pixelX + gestureState.dx;
-        const newPixelY = initialTextPosition.current.pixelY + gestureState.dy;
+        // Use ACTUAL device dimensions for proper drag calculations
+        const percentageChangeX = (gestureState.dx / actualScreenWidth) * 100;
+        const percentageChangeY = (gestureState.dy / actualScreenHeight) * 100;
         
-        // Convert back to percentage with bounds checking
-        const screenHeight = Dimensions.get('window').height;
-        const newX = Math.max(10, Math.min(90, ((newPixelX + 50) / screenWidth) * 100));
-        const newY = Math.max(10, Math.min(90, ((newPixelY + 25) / screenHeight) * 100));
+        // Apply loose bounds (2-98%) to keep text mostly on screen
+        const newX = Math.max(2, Math.min(98, initialTextPosition.current.startPercentX + percentageChangeX));
+        const newY = Math.max(2, Math.min(98, initialTextPosition.current.startPercentY + percentageChangeY));
         
         setTextPosition({ x: newX, y: newY });
-        console.log(`📍 Dragging: x=${newX.toFixed(1)}%, y=${newY.toFixed(1)}% | Pixels: ${newPixelX.toFixed(0)}px, ${newPixelY.toFixed(0)}px | Gesture: dx=${gestureState.dx.toFixed(0)}, dy=${gestureState.dy.toFixed(0)}`);
+        console.log(`📍 DRAGGING: dx=${gestureState.dx.toFixed(0)}, dy=${gestureState.dy.toFixed(0)} | %ΔX=${percentageChangeX.toFixed(1)}%, %ΔY=${percentageChangeY.toFixed(1)}% → ${newX.toFixed(1)}%, ${newY.toFixed(1)}%`);
       },
-      onPanResponderRelease: () => {
+      onPanResponderRelease: (event, gestureState) => {
         setIsDraggingText(false);
-        console.log(`🏁 Drag ended at: ${textPosition.x.toFixed(1)}%, ${textPosition.y.toFixed(1)}%`);
+        console.log(`🏁 DRAG END: Final ${textPosition.x.toFixed(1)}%, ${textPosition.y.toFixed(1)}% | Total dx=${gestureState.dx}, dy=${gestureState.dy}`);
       },
     });
 
@@ -926,8 +1016,9 @@ export default function CameraScreen({ navigation }) {
             <View
               style={{
                 position: 'absolute',
-                left: (screenWidth * textPosition.x / 100) - 50, // Convert percentage to pixels and center
-                top: (Dimensions.get('window').height * textPosition.y / 100) - 25, // Convert percentage to pixels and center
+                left: `${textPosition.x}%`,
+                top: `${textPosition.y}%`,
+                transform: [{ translateX: -50 }, { translateY: -50 }],
               }}
               {...textDragResponder.panHandlers}
             >

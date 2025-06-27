@@ -19,58 +19,112 @@ class CollegeRAGService {
     };
   }
 
-  // 1. Smart Caption Generation for College Students
-  async generateSmartCaption(imageContext, userProfile = {}) {
+  // 1. Smart Caption Generation for College Students - Enhanced with Detailed Context
+  async generateSmartCaption(imageContext, userProfile = {}, screenContext = {}) {
     try {
+      const currentTime = new Date();
+      const timeOfDay = this.getTimeOfDay(currentTime);
+      const dayOfWeek = currentTime.toLocaleDateString('en-US', { weekday: 'long' });
+      const season = this.getSeason(currentTime);
+      
       const prompt = `
-You are an AI assistant helping college students create authentic, engaging social media captions.
+You are an advanced AI caption generator specializing in authentic, engaging content for college students. Create highly personalized captions that feel natural and relatable.
 
-Student Profile:
-- Major: ${userProfile.major || 'Unknown'}
-- Year: ${userProfile.year || 'Freshman'}
-- Interests: ${(userProfile.interests || []).join(', ') || 'General'}
+=== CURRENT CONTEXT ===
+Time: ${timeOfDay} (${dayOfWeek})
+Season: ${season}
+App Context: ${screenContext.screen || 'camera'} screen
+Photo Session Type: ${screenContext.photoType || 'casual'}
+
+=== STUDENT PROFILE ===
+- Major/Field: ${userProfile.major || 'Student'}
+- Academic Year: ${userProfile.year || 'Unknown'}
+- Interests: ${(userProfile.interests || []).join(', ') || 'General college activities'}
 - Campus: ${userProfile.campus || 'College'}
-- Recent Activities: ${(userProfile.recentActivities || []).join(', ') || 'None'}
+- Recent Activities: ${(userProfile.recentActivities || []).join(', ') || 'Daily college life'}
+- Caption Style: ${userProfile.captionStyle || 'authentic'}
 
-Image Context: ${imageContext}
+=== IMAGE CONTEXT ===
+${typeof imageContext === 'string' ? imageContext : JSON.stringify(imageContext)}
 
-Generate 3 different caption styles:
-1. Casual/Funny (with emojis)
-2. Motivational/Academic 
-3. Social/Friend-focused
+=== DETAILED CAPTION GENERATION ===
+Create 5 different caption styles with multiple variations each:
+
+1. **Casual & Authentic**: Natural, conversational tone with relevant emojis
+2. **Motivational & Academic**: Inspiring but relatable to student struggles
+3. **Funny & Relatable**: College humor, self-aware but positive
+4. **Aesthetic & Minimal**: Clean, simple, Instagram-worthy
+5. **Story-Driven**: Captures the moment, tells a mini story
 
 Each caption should:
-- Be under 150 characters
-- Feel authentic to college life
-- Include relevant hashtags
-- Match the image context
+- Feel genuinely written by a college student
+- Consider the current time/day/season context
+- Reflect current college trends and language
+- Include appropriate emojis and hashtags when relevant
+- Range from 15-140 characters
+- Be specific to the image and student context
+- Avoid generic phrases
 - Reference their major/interests when relevant
 
-Return as JSON: {"casual": "...", "motivational": "...", "social": "..."}`;
+Return as JSON:
+{
+  "casual": ["casual caption 1", "casual caption 2", "casual caption 3"],
+  "motivational": ["inspiring caption 1", "inspiring caption 2"],
+  "funny": ["humorous caption 1", "humorous caption 2"],
+  "aesthetic": ["minimal caption 1", "minimal caption 2"],
+  "story": ["story caption 1", "story caption 2"],
+  "contextualNote": "explanation of how current context influenced these captions"
+}`;
 
       const response = await this.callOpenAI(prompt);
       const result = this.parseJSONResponse(response);
       
       return {
         suggestions: [
-          result.casual || "Great moment! 📸",
-          result.motivational || "Making memories! ✨", 
-          result.social || "Good times with friends! 🎉"
+          ...(result.casual || ["Capturing the moment ✨"]),
+          ...(result.motivational || ["Every day is progress 💪"]), 
+          ...(result.funny || ["College life in a nutshell 😅"]),
+          ...(result.aesthetic || ["✨ simple moments ✨"]),
+          ...(result.story || ["Another chapter in the books 📖"])
         ],
-        context: imageContext,
+        contextualNote: result.contextualNote || "Captions tailored for current moment",
+        categories: {
+          casual: result.casual || [],
+          motivational: result.motivational || [],
+          funny: result.funny || [],
+          aesthetic: result.aesthetic || [],
+          story: result.story || []
+        },
+        context: {
+          imageContext,
+          timeContext: `${timeOfDay} on ${dayOfWeek}`,
+          season,
+          userProfile: userProfile.major || 'Student'
+        },
         timestamp: Date.now()
       };
     } catch (error) {
       console.error('Error generating smart caption:', error);
       return {
         suggestions: [
-          "College life! 📚✨",
-          "Making memories! 🎉",
-          "Another day, another adventure! 🌟"
+          "Living in the moment ✨",
+          "Making it count 💪",
+          "Just another day of beautiful chaos 😅", 
+          "✨ vibes ✨",
+          `${timeOfDay} energy on ${dayOfWeek} 🌟`
         ],
-        context: imageContext
+        contextualNote: "Default captions with time context"
       };
     }
+  }
+
+  // Helper method to determine season
+  getSeason(date = new Date()) {
+    const month = date.getMonth();
+    if (month >= 2 && month <= 4) return 'Spring';
+    if (month >= 5 && month <= 7) return 'Summer';
+    if (month >= 8 && month <= 10) return 'Fall';
+    return 'Winter';
   }
 
   // 2. Campus Event Suggestions with Personalization
@@ -594,58 +648,90 @@ Return as JSON:
     }
   }
 
-  // 13. Smart Message Suggestions for Chat
-  async generateMessageSuggestions(conversationContext, userProfile = {}) {
+  // 13. Smart Message Suggestions for Chat - Enhanced with detailed context awareness
+  async generateMessageSuggestions(conversationContext, userProfile = {}, screenContext = {}) {
     try {
+      const currentTime = new Date();
+      const timeOfDay = this.getTimeOfDay(currentTime);
+      const dayOfWeek = currentTime.toLocaleDateString('en-US', { weekday: 'long' });
+      
       const prompt = `
-You are an AI assistant helping college students with conversation suggestions.
+You are an advanced AI conversation assistant helping a college student craft authentic, contextually appropriate messages.
 
-Conversation Context:
-- Recent Messages: ${(conversationContext.recentMessages || []).slice(-3).join(', ')}
-- Chat Type: ${conversationContext.chatType || 'friend'}
+=== CURRENT CONTEXT ===
+Time: ${timeOfDay} (${dayOfWeek})
+Screen Context: ${screenContext.screen || 'chat'}
+Activity Context: ${screenContext.activity || 'messaging'}
+
+=== CONVERSATION CONTEXT ===
+- Recent Messages (last 5): ${(conversationContext.recentMessages || []).slice(-5).map(msg => `"${msg}"`).join(', ')}
+- Chat Type: ${conversationContext.chatType || 'individual'} chat
 - Relationship: ${conversationContext.relationship || 'friend'}
-- Context: ${conversationContext.context || 'casual'}
-- Mood: ${conversationContext.mood || 'friendly'}
+- Current Mood/Tone: ${conversationContext.mood || 'casual'}
+- Conversation Length: ${(conversationContext.recentMessages || []).length} recent messages
+- Group Size: ${conversationContext.groupSize || 'N/A'}
 
-Student Profile:
-- Major: ${userProfile.major || 'Unknown'}
-- Interests: ${(userProfile.interests || []).join(', ') || 'General'}
+=== USER PROFILE ===
+- Major/Field: ${userProfile.major || 'Unknown'}
+- Year: ${userProfile.year || 'Unknown'}
+- Interests: ${(userProfile.interests || []).join(', ') || 'General interests'}
 - Personality: ${userProfile.personality || 'friendly'}
+- Communication Style: ${userProfile.communicationStyle || 'casual'}
 
-Generate 3 different message suggestions:
-1. Casual/Fun response
-2. Thoughtful/Engaging response  
-3. Question/Conversation starter
+=== DETAILED MESSAGE GENERATION ===
+Generate 5 different message suggestions that are:
+1. **Casual & Fun**: Light-hearted, emoji-rich, perfect for keeping the energy up
+2. **Thoughtful & Engaging**: Shows genuine interest, asks follow-up questions
+3. **Supportive & Encouraging**: Positive reinforcement, emotional support
+4. **Activity-Based**: Suggests something to do together (time-appropriate)
+5. **Conversation Deepener**: Takes the conversation in a more meaningful direction
 
 Each suggestion should:
-- Be natural and authentic
-- Match the conversation flow
-- Be appropriate for college students
-- Include emojis when appropriate
-- Be under 100 characters
+- Be highly contextual to the recent conversation flow
+- Consider the current time of day and day of week
+- Reflect college student communication patterns
+- Include appropriate emojis and modern texting style
+- Be 15-80 characters (natural texting length)
+- Feel authentic and not AI-generated
+- Consider if this is a good time for the suggested activity
 
-Return as JSON: {"casual": "...", "thoughtful": "...", "question": "..."}`;
+Return as JSON:
+{
+  "casual": "fun, light-hearted response with emojis",
+  "thoughtful": "engaging response that shows interest",
+  "supportive": "encouraging and positive message",  
+  "activity": "time-appropriate activity suggestion",
+  "deeper": "conversation starter for meaningful topics",
+  "contextExplanation": "brief explanation of why these suggestions fit the current context"
+}`;
 
       const response = await this.callOpenAI(prompt);
       const result = this.parseJSONResponse(response);
       
       return {
         suggestions: [
-          result.casual || "Sounds good! 😊",
-          result.thoughtful || "That's really interesting!",
-          result.question || "What do you think about...?"
+          result.casual || "That's awesome! 😄",
+          result.thoughtful || "Tell me more about that!",
+          result.supportive || "You've got this! 💪",
+          result.activity || "Want to hang out?",
+          result.deeper || "How are you feeling about everything?"
         ],
+        contextExplanation: result.contextExplanation || "General conversation suggestions",
         context: conversationContext.context,
+        timeContext: `${timeOfDay} on ${dayOfWeek}`,
         timestamp: Date.now()
       };
     } catch (error) {
       console.error('Error generating message suggestions:', error);
       return {
         suggestions: [
-          "That's awesome! 😄",
-          "I totally get that!",
-          "Tell me more about that!"
-        ]
+          "That's so cool! 😊",
+          "I'm really interested to hear more!",
+          "You're doing great! 🌟", 
+          "Want to meet up later?",
+          "How has your day been?"
+        ],
+        contextExplanation: "Default suggestions due to AI error"
       };
     }
   }
@@ -749,19 +835,19 @@ Analyze and return insights as JSON:
           'Authorization': `Bearer ${this.openaiApiKey}`
         },
         body: JSON.stringify({
-          model: 'gpt-3.5-turbo',
+          model: 'gpt-4-turbo',
           messages: [
             {
               role: 'system',
-              content: 'You are a helpful AI assistant specialized in college life and student support. Always respond with practical, actionable advice tailored to college students. Format your responses as valid JSON when requested.'
+              content: 'You are an advanced AI assistant specialized in college life and student support. You provide highly detailed, personalized, and contextually aware advice tailored to college students. Always consider the current screen context, user activity, time of day, and social situation when providing recommendations. Your responses should be comprehensive, practical, and actionable. When requested to format as JSON, ensure the response is valid and well-structured with detailed explanations. Be conversational yet informative, and always consider the emotional and social aspects of college life.'
             },
             {
               role: 'user',
               content: prompt
             }
           ],
-          max_tokens: 1000,
-          temperature: 0.7
+          max_tokens: 3000,
+          temperature: 0.8
         })
       });
 
@@ -816,6 +902,15 @@ Analyze and return insights as JSON:
     }
   }
 
+  // Helper method to determine time of day context
+  getTimeOfDay(date = new Date()) {
+    const hour = date.getHours();
+    if (hour >= 6 && hour < 12) return 'Morning';
+    if (hour >= 12 && hour < 17) return 'Afternoon'; 
+    if (hour >= 17 && hour < 22) return 'Evening';
+    return 'Late Night';
+  }
+
   // Cache user context for personalization
   async cacheUserContext(userId, context) {
     try {
@@ -858,24 +953,65 @@ Analyze and return insights as JSON:
     }
   }
 
-  // Main function used by AIAssistant
-  async getAIResponse(query, userId) {
+  // Context builder helper for enhanced AI interactions
+  buildScreenContext(screenName, activity, additionalContext = {}) {
+    const currentTime = new Date();
+    const timeOfDay = this.getTimeOfDay(currentTime);
+    const dayOfWeek = currentTime.toLocaleDateString('en-US', { weekday: 'long' });
+    const season = this.getSeason(currentTime);
+
+    return {
+      screen: screenName,
+      activity: activity,
+      timeOfDay,
+      dayOfWeek,
+      season,
+      location: 'campus',
+      timestamp: Date.now(),
+      ...additionalContext
+    };
+  }
+
+  // Main function used by AIAssistant - Enhanced with detailed context awareness
+  async getAIResponse(query, userId, screenContext = {}) {
     try {
       const userContext = await this.getUserContext(userId);
+      const currentTime = new Date();
+      const timeOfDay = this.getTimeOfDay(currentTime);
+      const dayOfWeek = currentTime.toLocaleDateString('en-US', { weekday: 'long' });
+      
       const prompt = `
-You are a helpful AI assistant for college students. Answer the following question in a friendly, informative way:
+You are an advanced AI assistant helping a college student. Provide a detailed, personalized response that considers their current context and situation.
 
-User Query: ${query}
+=== CURRENT CONTEXT ===
+Screen: ${screenContext.screen || 'general'}
+Activity: ${screenContext.activity || 'browsing'}
+Time: ${timeOfDay} (${dayOfWeek})
+Location Context: ${screenContext.location || 'campus'}
 
-User Context: ${JSON.stringify(userContext)}
+=== USER QUERY ===
+"${query}"
 
-Keep your response conversational and relevant to college life. If the question is about academic topics, provide practical advice. If it's about social situations, be supportive and encouraging.`;
+=== USER PROFILE ===
+${JSON.stringify(userContext, null, 2)}
+
+=== RESPONSE GUIDELINES ===
+1. Consider the current screen/activity context in your response
+2. Provide specific, actionable advice tailored to college life
+3. Include relevant timing considerations (if applicable)
+4. Consider social and emotional aspects
+5. If relevant, suggest follow-up actions or related features in the app
+6. Be conversational but comprehensive
+7. If this relates to a specific campus activity, provide detailed steps and tips
+8. Consider the user's likely current mood and energy level based on time/context
+
+Provide a detailed, helpful response that goes beyond basic advice:`;
 
       const response = await this.callOpenAI(prompt);
-      return response || "I'm here to help! Could you ask me something specific about campus life, studies, or anything else you need assistance with?";
+      return response || "I'm here to provide detailed guidance on campus life, studies, and everything college-related! What specific aspect would you like me to dive deeper into?";
     } catch (error) {
       console.error('Error getting AI response:', error);
-      return "Sorry, I'm having trouble processing your request right now. Please try again!";
+      return "I apologize, but I'm experiencing technical difficulties. Please try again, and I'll do my best to provide you with detailed, helpful guidance!";
     }
   }
 }

@@ -209,7 +209,7 @@ export default function ChatScreen({ navigation, route }) {
     }
   };
 
-  // Generate AI message suggestions
+  // Generate AI message suggestions with enhanced context
   const generateAISuggestions = async () => {
     try {
       const recentMessages = messages.slice(-5).map(m => m.content);
@@ -218,14 +218,47 @@ export default function ChatScreen({ navigation, route }) {
         chatType: isGroup ? 'group' : 'individual',
         relationship: 'friend',
         context: 'casual',
-        mood: 'friendly'
+        mood: 'friendly',
+        groupSize: isGroup ? groupParticipants.length : 2,
+        conversationLength: messages.length
       };
 
-      const result = await ragService.generateMessageSuggestions(conversationContext, userProfile);
+      // Enhanced screen context for more detailed AI suggestions
+      const screenContext = {
+        screen: 'messaging',
+        activity: 'requesting_suggestions',
+        location: 'campus',
+        conversationContext: {
+          isGroup,
+          groupName: isGroup ? groupName : null,
+          messageCount: messages.length,
+          ephemeralMode
+        }
+      };
+
+      const result = await ragService.generateMessageSuggestions(
+        conversationContext, 
+        userProfile, 
+        screenContext
+      );
+      
       setAiSuggestions(result.suggestions);
       setShowSuggestions(true);
+      
+      // Log context explanation if available
+      if (result.contextExplanation) {
+        console.log('AI Context:', result.contextExplanation);
+      }
     } catch (error) {
       console.error('Error generating AI suggestions:', error);
+      // Fallback to basic suggestions
+      setAiSuggestions([
+        "That's interesting! 😊",
+        "Tell me more about that",
+        "How are you feeling about it?",
+        "Want to hang out later?"
+      ]);
+      setShowSuggestions(true);
     }
   };
 
