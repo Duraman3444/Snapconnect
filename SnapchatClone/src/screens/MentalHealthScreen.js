@@ -16,17 +16,18 @@ export default function MentalHealthScreen({ navigation }) {
   const [aiRecommendations, setAiRecommendations] = useState(null);
   const [loadingAI, setLoadingAI] = useState(false);
   const [moodHistory, setMoodHistory] = useState([]);
+  const [specificRequest, setSpecificRequest] = useState('');
 
   const stressLevels = Array.from({ length: 10 }, (_, i) => i + 1);
 
   // Define moods array that was missing
   const moods = [
-    { value: 'terrible', emoji: '😭', color: '#dc2626' },
-    { value: 'bad', emoji: '😞', color: '#ea580c' },
-    { value: 'okay', emoji: '😐', color: '#ca8a04' },
-    { value: 'good', emoji: '😊', color: '#16a34a' },
-    { value: 'great', emoji: '😄', color: '#2563eb' },
-    { value: 'amazing', emoji: '🤩', color: '#9333ea' }
+    { value: 'terrible', emoji: '😭', color: '#dc2626', label: 'Terrible' },
+    { value: 'bad', emoji: '😞', color: '#ea580c', label: 'Bad' },
+    { value: 'okay', emoji: '😐', color: '#ca8a04', label: 'Okay' },
+    { value: 'good', emoji: '😊', color: '#16a34a', label: 'Good' },
+    { value: 'great', emoji: '😄', color: '#2563eb', label: 'Great' },
+    { value: 'amazing', emoji: '🤩', color: '#9333ea', label: 'Amazing' }
   ];
 
   const wellnessChallenges = [
@@ -143,19 +144,28 @@ export default function MentalHealthScreen({ navigation }) {
 
   const generateAIWellnessRecommendations = async () => {
     if (!selectedMood) {
-      Alert.alert('Mood Required', 'Please select your current mood first.');
+      Alert.alert('Mood Required', 'Please select your current mood first to get personalized recommendations.');
       return;
     }
 
     setLoadingAI(true);
     try {
-      const userProfile = await userProfileService.getMockUserProfile(currentUser.id);
-      const contextualData = await userProfileService.getContextualUserData(currentUser.id, 'wellness');
+      // Provide fallback user profile if service fails
+      let userProfile;
+      try {
+        userProfile = await userProfileService.getMockUserProfile(currentUser.id);
+      } catch (error) {
+        console.warn('Failed to get user profile, using defaults:', error);
+        userProfile = { major: 'General Studies', year: 'Sophomore', interests: ['wellness'] };
+      }
 
       const moodData = {
         current: selectedMood,
-        stressors: ['academic pressure', 'social challenges', 'time management']
+        stressors: ['academic pressure', 'social challenges', 'time management'],
+        specificRequest: specificRequest.trim() || null
       };
+
+      console.log('Requesting AI wellness recommendations with mood:', selectedMood, 'stress level:', stressLevel, 'specific request:', specificRequest);
 
       const recommendations = await ragService.generateWellnessRecommendations(
         moodData,
@@ -163,25 +173,126 @@ export default function MentalHealthScreen({ navigation }) {
         'high' // Could be dynamic based on academic calendar
       );
 
-      setAiRecommendations(recommendations);
+      console.log('AI recommendations received:', recommendations);
 
-      // Track AI usage
-      await userProfileService.trackActivity(currentUser.id, {
-        type: 'ai_wellness_recommendations',
-        mood: selectedMood,
-        stressLevel: stressLevel,
-        success: recommendations !== null
-      });
+      if (recommendations && Object.keys(recommendations).length > 0) {
+        setAiRecommendations(recommendations);
 
-      Alert.alert(
-        '🤖 AI Wellness Coach',
-        'Personalized wellness recommendations generated based on your current mood and stress level.',
-        [{ text: 'View Recommendations' }]
-      );
+        // Track AI usage
+        try {
+          await userProfileService.trackActivity(currentUser.id, {
+            type: 'ai_wellness_recommendations',
+            mood: selectedMood,
+            stressLevel: stressLevel,
+            success: true
+          });
+        } catch (trackError) {
+          console.warn('Failed to track activity:', trackError);
+        }
+
+        // Close the modal so user can see recommendations
+        setShowMoodTracker(false);
+        
+        // Clear the specific request for next time
+        setSpecificRequest('');
+        
+        Alert.alert(
+          '🤖 AI Wellness Coach',
+          'Personalized wellness recommendations generated based on your current mood and stress level. Check below!',
+          [{ text: 'View Recommendations' }]
+        );
+      } else {
+        // Provide fallback recommendations
+        const fallbackRecommendations = {
+          immediate: {
+            activities: [
+              'Take 5 deep breaths',
+              'Go for a short walk',
+              'Listen to calming music'
+            ],
+            breathing: 'Try the 4-7-8 breathing technique: Inhale for 4, hold for 7, exhale for 8',
+            affirmation: 'I am capable of handling whatever comes my way, one step at a time.'
+          },
+          daily: {
+            habits: [
+              'Maintain a consistent sleep schedule',
+              'Practice gratitude journaling',
+              'Stay hydrated throughout the day'
+            ]
+          },
+          resources: {
+            campusSupport: [
+              'Campus Counseling Center',
+              'Student Wellness Services',
+              'Peer Support Groups'
+            ],
+            techniques: [
+              'Mindfulness meditation',
+              'Progressive muscle relaxation',
+              'Journaling'
+            ]
+          }
+        };
+
+        setAiRecommendations(fallbackRecommendations);
+        
+        // Close the modal so user can see recommendations
+        setShowMoodTracker(false);
+        setSpecificRequest('');
+        
+        Alert.alert(
+          '🤖 Wellness Support',
+          'Here are some general wellness recommendations. For personalized AI advice, please check your internet connection and try again. Check below!',
+          [{ text: 'View Recommendations' }]
+        );
+      }
 
     } catch (error) {
       console.error('Error generating wellness recommendations:', error);
-      Alert.alert('AI Error', 'Unable to generate personalized recommendations at this time.');
+      
+      // Provide helpful fallback recommendations even when AI fails
+      const emergencyRecommendations = {
+        immediate: {
+          activities: [
+            'Take slow, deep breaths',
+            'Find a quiet space to sit',
+            'Drink some water'
+          ],
+          breathing: 'Focus on your breathing: In for 4 counts, hold for 4, out for 4',
+          affirmation: 'This feeling is temporary, and I have the strength to get through it.'
+        },
+        daily: {
+          habits: [
+            'Try to get 7-8 hours of sleep',
+            'Take breaks between study sessions',
+            'Connect with friends or family'
+          ]
+        },
+        resources: {
+          campusSupport: [
+            'Campus Counseling Center',
+            'Student Health Services',
+            'Crisis Hotline: 988'
+          ],
+          techniques: [
+            'Deep breathing exercises',
+            'Grounding techniques (5-4-3-2-1)',
+            'Light physical activity'
+          ]
+        }
+      };
+
+      setAiRecommendations(emergencyRecommendations);
+      
+      // Close the modal so user can see recommendations
+      setShowMoodTracker(false);
+      setSpecificRequest('');
+      
+      Alert.alert(
+        'Wellness Support Available',
+        'While we couldn\'t connect to our AI service, here are some general wellness strategies that can help. Check below!',
+        [{ text: 'View Recommendations' }]
+      );
     } finally {
       setLoadingAI(false);
     }
@@ -454,9 +565,13 @@ export default function MentalHealthScreen({ navigation }) {
               onPress={() => setShowMoodTracker(true)}
             >
               <Text style={{ color: currentTheme.background, fontSize: 16, fontWeight: 'bold' }}>
-                ✍️ Log Today's Mood
+                ✍️ Log Today's Mood & Get AI Recommendations
               </Text>
             </TouchableOpacity>
+
+            <Text style={{ color: currentTheme.textSecondary, fontSize: 14, textAlign: 'center', marginBottom: 16, lineHeight: 20 }}>
+              💡 To get personalized AI wellness recommendations, tap "Log Today's Mood", select how you're feeling, and then tap "Get AI Wellness Recommendations"
+            </Text>
 
             {/* Recent Mood History */}
             {moodHistory.length > 0 && (
@@ -497,6 +612,13 @@ export default function MentalHealthScreen({ navigation }) {
             <View style={{ backgroundColor: '#f0f9ff', borderRadius: 16, padding: 20, marginBottom: 20, borderWidth: 1, borderColor: '#0ea5e9' }}>
               <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#0c4a6e', marginBottom: 12 }}>
                 🤖 Personalized Wellness Recommendations
+              </Text>
+              
+              <Text style={{ color: '#075985', fontSize: 14, marginBottom: 16, fontStyle: 'italic' }}>
+                Generated for: {selectedMood} mood, stress level {stressLevel}/10
+                {moodHistory.length > 0 && moodHistory[0].ai_specific_request && (
+                  <Text style={{ fontWeight: 'bold' }}> • Addressing your specific concern</Text>
+                )}
               </Text>
 
               {/* Immediate Actions */}
@@ -671,6 +793,38 @@ export default function MentalHealthScreen({ navigation }) {
               </View>
             </View>
 
+            {/* Specific Request Input */}
+            <View style={{ marginBottom: 32 }}>
+              <Text style={{ fontSize: 18, fontWeight: 'bold', color: currentTheme.text, marginBottom: 12, textAlign: 'center' }}>
+                💬 Specific Request (Optional)
+              </Text>
+              <Text style={{ color: currentTheme.textSecondary, fontSize: 14, marginBottom: 16, textAlign: 'center', lineHeight: 20 }}>
+                Tell the AI about any specific challenges, situations, or areas you'd like personalized advice about
+              </Text>
+              <TextInput
+                style={{
+                  backgroundColor: currentTheme.surface,
+                  borderRadius: 12,
+                  padding: 16,
+                  color: currentTheme.text,
+                  borderWidth: 1,
+                  borderColor: currentTheme.border,
+                  fontSize: 16,
+                  minHeight: 80,
+                  textAlignVertical: 'top'
+                }}
+                placeholder="e.g., 'I'm struggling with exam anxiety and can't sleep well' or 'Having trouble managing time between work and studies'"
+                placeholderTextColor={currentTheme.textSecondary}
+                value={specificRequest}
+                onChangeText={setSpecificRequest}
+                multiline
+                maxLength={300}
+              />
+              <Text style={{ color: currentTheme.textSecondary, fontSize: 12, marginTop: 8, textAlign: 'right' }}>
+                {specificRequest.length}/300
+              </Text>
+            </View>
+
             {/* AI Recommendation Button */}
             <TouchableOpacity
               style={{
@@ -678,7 +832,7 @@ export default function MentalHealthScreen({ navigation }) {
                 borderRadius: 12,
                 padding: 16,
                 alignItems: 'center',
-                marginBottom: 20,
+                marginBottom: 12,
                 opacity: loadingAI ? 0.6 : 1
               }}
               onPress={generateAIWellnessRecommendations}
@@ -693,9 +847,41 @@ export default function MentalHealthScreen({ navigation }) {
                 </>
               ) : (
                 <Text style={{ color: 'white', fontSize: 16, fontWeight: 'bold' }}>
-                  🤖 Get AI Wellness Recommendations
+                  🤖 Get Personalized AI Recommendations
                 </Text>
               )}
+            </TouchableOpacity>
+
+            {/* Test AI Connection Button (for debugging) */}
+            <TouchableOpacity
+              style={{
+                backgroundColor: currentTheme.surface,
+                borderRadius: 8,
+                padding: 12,
+                alignItems: 'center',
+                marginBottom: 20,
+                borderWidth: 1,
+                borderColor: currentTheme.border
+              }}
+              onPress={async () => {
+                console.log('Testing AI connection...');
+                try {
+                  const testResult = await ragService.testOpenAIConnection();
+                  Alert.alert(
+                    'AI Connection Test',
+                    testResult.success 
+                      ? `✅ Connection successful!\nResponse: ${testResult.response}`
+                      : `❌ Connection failed:\n${testResult.error}`,
+                    [{ text: 'OK' }]
+                  );
+                } catch (error) {
+                  Alert.alert('Test Error', `Failed to test connection: ${error.message}`);
+                }
+              }}
+            >
+              <Text style={{ color: currentTheme.text, fontSize: 14, fontWeight: '600' }}>
+                🔧 Test AI Connection
+              </Text>
             </TouchableOpacity>
 
             <Text style={{ color: currentTheme.textSecondary, fontSize: 12, textAlign: 'center', lineHeight: 18 }}>

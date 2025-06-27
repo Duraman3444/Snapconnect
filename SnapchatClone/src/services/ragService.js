@@ -301,6 +301,8 @@ Return as JSON:
   // 7. AI Mental Health & Wellness Support
   async generateWellnessRecommendations(moodData, stressLevel, academicPressure) {
     try {
+      console.log('Generating wellness recommendations for mood:', moodData.current, 'stress level:', stressLevel);
+      
       const prompt = `
 You are an AI wellness coach helping college students manage stress and maintain mental health.
 
@@ -309,15 +311,17 @@ Current State:
 - Stress Level: ${stressLevel}/10
 - Academic Pressure: ${academicPressure || 'moderate'}
 - Recent Stressors: ${(moodData.stressors || []).join(', ')}
+${moodData.specificRequest ? `- Specific Request: "${moodData.specificRequest}"` : ''}
 
-Generate supportive wellness recommendations (not medical advice):
+Generate supportive wellness recommendations (not medical advice). Be specific and actionable for college students.
+${moodData.specificRequest ? `Pay special attention to their specific request and provide targeted advice for their situation.` : ''}
 
-Return as JSON:
+Return as valid JSON with this exact structure:
 {
   "immediate": {
-    "activities": ["activity1", "activity2", "activity3"],
-    "breathing": "breathing exercise",
-    "affirmation": "positive affirmation"
+    "activities": ["Take 3 deep breaths", "Step outside for fresh air", "Listen to calming music"],
+    "breathing": "specific breathing exercise instruction",
+    "affirmation": "positive affirmation message"
   },
   "daily": {
     "habits": ["habit1", "habit2"],
@@ -325,16 +329,35 @@ Return as JSON:
     "selfCare": ["care1", "care2"]
   },
   "resources": {
-    "campusSupport": ["resource1", "resource2"],
-    "apps": ["app1", "app2"],
-    "techniques": ["technique1", "technique2"]
+    "campusSupport": ["Campus Counseling Center", "Student Wellness Services"],
+    "apps": ["Headspace", "Calm"],
+    "techniques": ["Mindfulness meditation", "Progressive muscle relaxation"]
   },
   "warning": "when to seek professional help"
 }`;
 
       const response = await this.callOpenAI(prompt);
+      
+      if (!response || response.trim() === '') {
+        console.warn('Empty response from OpenAI API');
+        return null;
+      }
+      
       const result = this.parseJSONResponse(response);
       
+      // Validate that we have the expected structure
+      if (!result || typeof result !== 'object') {
+        console.warn('Invalid JSON structure in response');
+        return null;
+      }
+      
+      // Ensure we have at least the immediate section
+      if (!result.immediate && !result.daily && !result.resources) {
+        console.warn('Response missing expected sections');
+        return null;
+      }
+      
+      console.log('Successfully generated wellness recommendations');
       return result;
     } catch (error) {
       console.error('Error generating wellness recommendations:', error);
@@ -712,38 +735,71 @@ Analyze and return insights as JSON:
   // Helper method to call OpenAI API
   async callOpenAI(prompt) {
     if (!this.openaiApiKey || this.openaiApiKey === 'your_openai_api_key_here') {
+      console.warn('OpenAI API key not configured, using fallback response');
       throw new Error('OpenAI API key not configured');
     }
 
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${this.openaiApiKey}`
-      },
-      body: JSON.stringify({
-        model: 'gpt-3.5-turbo',
-        messages: [
-          {
-            role: 'system',
-            content: 'You are a helpful AI assistant specialized in college life and student support. Always respond with practical, actionable advice tailored to college students.'
-          },
-          {
-            role: 'user',
-            content: prompt
-          }
-        ],
-        max_tokens: 1000,
-        temperature: 0.7
-      })
-    });
+    try {
+      console.log('Making OpenAI API call...');
+      
+      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${this.openaiApiKey}`
+        },
+        body: JSON.stringify({
+          model: 'gpt-3.5-turbo',
+          messages: [
+            {
+              role: 'system',
+              content: 'You are a helpful AI assistant specialized in college life and student support. Always respond with practical, actionable advice tailored to college students. Format your responses as valid JSON when requested.'
+            },
+            {
+              role: 'user',
+              content: prompt
+            }
+          ],
+          max_tokens: 1000,
+          temperature: 0.7
+        })
+      });
 
-    if (!response.ok) {
-      throw new Error(`OpenAI API error: ${response.status}`);
+      console.log('OpenAI API response status:', response.status);
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('OpenAI API error response:', errorText);
+        
+        if (response.status === 401) {
+          throw new Error('OpenAI API authentication failed - invalid API key');
+        } else if (response.status === 429) {
+          throw new Error('OpenAI API rate limit exceeded - please try again later');
+        } else if (response.status === 500) {
+          throw new Error('OpenAI API server error - please try again later');
+        } else {
+          throw new Error(`OpenAI API error: ${response.status} - ${errorText}`);
+        }
+      }
+
+      const data = await response.json();
+      console.log('OpenAI API response received successfully');
+      
+      if (!data.choices || !data.choices[0] || !data.choices[0].message) {
+        throw new Error('Invalid response structure from OpenAI API');
+      }
+      
+      return data.choices[0].message.content;
+    } catch (error) {
+      console.error('OpenAI API call failed:', error);
+      
+      // Re-throw with more context
+      if (error.message.includes('fetch')) {
+        throw new Error('Network error - please check your internet connection');
+      }
+      
+      throw error;
     }
-
-    const data = await response.json();
-    return data.choices[0].message.content;
   }
 
   // Helper method to parse JSON responses
@@ -781,6 +837,45 @@ Analyze and return insights as JSON:
     } catch (error) {
       console.error('Error getting user context:', error);
       return {};
+    }
+  }
+
+  // Test function to check OpenAI API connectivity
+  async testOpenAIConnection() {
+    try {
+      console.log('Testing OpenAI API connection...');
+      console.log('API Key configured:', !!this.openaiApiKey);
+      console.log('API Key starts with:', this.openaiApiKey ? this.openaiApiKey.substring(0, 10) + '...' : 'None');
+      
+      const testPrompt = 'Respond with just the word "connected" if you can read this message.';
+      const response = await this.callOpenAI(testPrompt);
+      
+      console.log('OpenAI API test response:', response);
+      return { success: true, response: response };
+    } catch (error) {
+      console.error('OpenAI API test failed:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  // Main function used by AIAssistant
+  async getAIResponse(query, userId) {
+    try {
+      const userContext = await this.getUserContext(userId);
+      const prompt = `
+You are a helpful AI assistant for college students. Answer the following question in a friendly, informative way:
+
+User Query: ${query}
+
+User Context: ${JSON.stringify(userContext)}
+
+Keep your response conversational and relevant to college life. If the question is about academic topics, provide practical advice. If it's about social situations, be supportive and encouraging.`;
+
+      const response = await this.callOpenAI(prompt);
+      return response || "I'm here to help! Could you ask me something specific about campus life, studies, or anything else you need assistance with?";
+    } catch (error) {
+      console.error('Error getting AI response:', error);
+      return "Sorry, I'm having trouble processing your request right now. Please try again!";
     }
   }
 }

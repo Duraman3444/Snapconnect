@@ -10,7 +10,8 @@ import {
   Alert,
   Keyboard,
   Image,
-  Dimensions
+  Dimensions,
+  ScrollView
 } from 'react-native';
 import { Video } from 'expo-av';
 import { useAuth } from '../context/SupabaseAuthContext';

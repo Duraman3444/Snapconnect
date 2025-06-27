@@ -745,6 +745,36 @@ class UserProfileService {
       return false;
     }
   }
+
+  // Main function used by AIAssistant
+  async getUserProfile(userId) {
+    try {
+      // Check if we have a cached profile
+      if (this.profiles.has(userId)) {
+        return this.profiles.get(userId);
+      }
+
+      // Try to get from storage
+      const cachedProfile = await AsyncStorage.getItem(`user_profile_${userId}`);
+      if (cachedProfile) {
+        const profile = JSON.parse(cachedProfile);
+        this.profiles.set(userId, profile);
+        return profile;
+      }
+
+      // Generate mock profile if none exists
+      const mockProfile = await this.getMockUserProfile(userId);
+      this.profiles.set(userId, mockProfile);
+      
+      // Cache it
+      await AsyncStorage.setItem(`user_profile_${userId}`, JSON.stringify(mockProfile));
+      
+      return mockProfile;
+    } catch (error) {
+      console.error('Error getting user profile:', error);
+      return await this.getMockUserProfile(userId);
+    }
+  }
 }
 
 export default new UserProfileService(); 
