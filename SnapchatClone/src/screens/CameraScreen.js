@@ -511,6 +511,42 @@ export default function CameraScreen({ navigation }) {
     }
   };
 
+  // AI Caption generation for photo editor
+  const generateAICaptionForEditor = async () => {
+    setIsGeneratingCaptions(true);
+    try {
+      // Get user profile for personalization
+      const userProfile = await userProfileService.getMockUserProfile(currentUser.id);
+      
+      console.log('🤖 Generating AI caption in editor...');
+      const result = await ragService.generateSmartCaption('photo', userProfile);
+      
+      // Set the first generated caption as text overlay
+      if (result.suggestions && result.suggestions.length > 0) {
+        setTextOverlay(result.suggestions[0]);
+        console.log('✅ AI caption applied:', result.suggestions[0]);
+        
+        // Show success feedback
+        Alert.alert('AI Caption Generated! 🤖', `Caption: "${result.suggestions[0]}"\n\nTap the text on the photo to edit it, or tap "Aa" to change it.`);
+      }
+      
+    } catch (error) {
+      console.error('Error generating AI caption:', error);
+      // Fallback captions
+      const fallbackCaptions = [
+        'College life! 📚✨',
+        'Making memories! 🎉',
+        'Another day, another adventure! 🌟'
+      ];
+      const randomCaption = fallbackCaptions[Math.floor(Math.random() * fallbackCaptions.length)];
+      setTextOverlay(randomCaption);
+      
+      Alert.alert('AI Caption Generated! 🤖', `Caption: "${randomCaption}"\n\nTap the text on the photo to edit it, or tap "Aa" to change it.`);
+    } finally {
+      setIsGeneratingCaptions(false);
+    }
+  };
+
   const proceedToShare = async () => {
     try {
       // Capture the edited photo with filters and text
@@ -841,33 +877,35 @@ export default function CameraScreen({ navigation }) {
               />
             )}
             
-            {/* Text overlay */}
-            {textOverlay && (
-              <View 
+                      {/* Text overlay */}
+          {textOverlay && (
+            <TouchableOpacity
+              style={{
+                position: 'absolute',
+                left: `${textPosition.x}%`,
+                top: `${textPosition.y}%`,
+                transform: [{ translateX: -50 }, { translateY: -50 }],
+              }}
+              onPress={() => setShowTextInput(true)}
+              activeOpacity={0.8}
+            >
+              <Text 
                 style={{
-                  position: 'absolute',
-                  left: `${textPosition.x}%`,
-                  top: `${textPosition.y}%`,
-                  transform: [{ translateX: -50 }, { translateY: -50 }],
+                  color: 'white',
+                  fontSize: 24,
+                  fontWeight: 'bold',
+                  textAlign: 'center',
+                  textShadowColor: 'rgba(0, 0, 0, 0.75)',
+                  textShadowOffset: { width: -1, height: 1 },
+                  textShadowRadius: 10,
+                  paddingHorizontal: 10,
+                  paddingVertical: 5,
                 }}
               >
-                <Text 
-                  style={{
-                    color: 'white',
-                    fontSize: 24,
-                    fontWeight: 'bold',
-                    textAlign: 'center',
-                    textShadowColor: 'rgba(0, 0, 0, 0.75)',
-                    textShadowOffset: { width: -1, height: 1 },
-                    textShadowRadius: 10,
-                    paddingHorizontal: 10,
-                    paddingVertical: 5,
-                  }}
-                >
-                  {textOverlay}
-                </Text>
-              </View>
-            )}
+                {textOverlay}
+              </Text>
+            </TouchableOpacity>
+          )}
           </View>
         </ViewShot>
 
@@ -880,12 +918,27 @@ export default function CameraScreen({ navigation }) {
             <Text style={styles.photoEditorButtonText}>✕</Text>
           </TouchableOpacity>
           
-          <TouchableOpacity
-            style={[styles.photoEditorButton, { backgroundColor: showTextInput ? '#6B46C1' : 'rgba(255, 255, 255, 0.2)' }]}
-            onPress={() => setShowTextInput(!showTextInput)}
-          >
-            <Text style={styles.photoEditorButtonText}>Aa</Text>
-          </TouchableOpacity>
+          <View style={styles.photoEditorTopRightControls}>
+            <TouchableOpacity
+              style={[styles.photoEditorButton, { 
+                backgroundColor: isGeneratingCaptions ? '#6B46C1' : 'rgba(255, 255, 255, 0.2)',
+                marginRight: 10
+              }]}
+              onPress={generateAICaptionForEditor}
+              disabled={isGeneratingCaptions}
+            >
+              <Text style={[styles.photoEditorButtonText, { fontSize: 16 }]}>
+                {isGeneratingCaptions ? '⏳' : '🤖'}
+              </Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity
+              style={[styles.photoEditorButton, { backgroundColor: showTextInput ? '#6B46C1' : 'rgba(255, 255, 255, 0.2)' }]}
+              onPress={() => setShowTextInput(!showTextInput)}
+            >
+              <Text style={styles.photoEditorButtonText}>Aa</Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
         {/* Filter indicator */}
@@ -903,6 +956,9 @@ export default function CameraScreen({ navigation }) {
             ))}
           </View>
           <Text style={styles.swipeHint}>← Swipe for filters →</Text>
+          <Text style={[styles.swipeHint, { marginTop: 5, fontSize: 11 }]}>
+            Tap 🤖 for AI caption • Tap Aa for text • Tap text to edit
+          </Text>
         </View>
 
         {/* Text input overlay */}
@@ -991,27 +1047,6 @@ export default function CameraScreen({ navigation }) {
             
             {/* Action Buttons */}
             <View style={[{ marginBottom: 20 }]}>
-              {/* AI Caption Button */}
-              <TouchableOpacity
-                style={[{ 
-                  backgroundColor: '#6B46C1', 
-                  borderRadius: 15, 
-                  paddingVertical: 12,
-                  marginBottom: 10
-                }]}
-                onPress={() => generateRAGCaptions(photo ? 'photo' : 'video')}
-                disabled={isGeneratingCaptions}
-              >
-                <Text style={[{ 
-                  color: 'white', 
-                  fontWeight: '600', 
-                  textAlign: 'center',
-                  fontSize: 16
-                }]}>
-                  {isGeneratingCaptions ? '🤖 Generating...' : '🤖 AI Smart Captions'}
-                </Text>
-              </TouchableOpacity>
-              
               <View style={[{ flexDirection: 'row' }]}>
                 <TouchableOpacity
                   style={[{ 
@@ -1718,6 +1753,10 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     zIndex: 10,
+  },
+  photoEditorTopRightControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   photoEditorBottomBar: {
     position: 'absolute',
