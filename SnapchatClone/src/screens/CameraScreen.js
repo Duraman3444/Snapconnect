@@ -75,7 +75,7 @@ export default function CameraScreen({ navigation }) {
   const cameraRef = useRef();
   const recordingTimerRef = useRef(null);
   const photoEditorRef = useRef();
-  const initialTextPosition = useRef({ x: 50, y: 40 });
+  const initialTextPosition = useRef({ pixelX: 0, pixelY: 0, startX: 0, startY: 0 });
   const { currentUser, logout, supabase } = useAuth();
   const { currentTheme } = useTheme();
   
@@ -859,33 +859,39 @@ export default function CameraScreen({ navigation }) {
       },
     });
 
-    // Text drag handler
+    // Text drag handler with simplified approach
     const textDragResponder = PanResponder.create({
       onStartShouldSetPanResponder: () => true,
       onMoveShouldSetPanResponder: () => true,
-      onPanResponderGrant: () => {
+      onPanResponderGrant: (event) => {
         setIsDraggingText(true);
-        // Store the initial position when drag starts
-        initialTextPosition.current = { x: textPosition.x, y: textPosition.y };
+        // Store the initial pixel position when drag starts
+        const currentPixelX = (screenWidth * textPosition.x / 100) - 50;
+        const currentPixelY = (Dimensions.get('window').height * textPosition.y / 100) - 25;
+        initialTextPosition.current = { 
+          pixelX: currentPixelX, 
+          pixelY: currentPixelY,
+          startX: event.nativeEvent.pageX,
+          startY: event.nativeEvent.pageY
+        };
+        console.log(`🎯 Drag started at: ${textPosition.x.toFixed(1)}%, ${textPosition.y.toFixed(1)}% (${currentPixelX}px, ${currentPixelY}px)`);
       },
       onPanResponderMove: (event, gestureState) => {
-        // Get the screen dimensions
+        // Calculate new pixel position directly from gesture
+        const newPixelX = initialTextPosition.current.pixelX + gestureState.dx;
+        const newPixelY = initialTextPosition.current.pixelY + gestureState.dy;
+        
+        // Convert back to percentage with bounds checking
         const screenHeight = Dimensions.get('window').height;
-        
-        // Calculate position change as percentage of screen from initial position
-        const deltaX = (gestureState.dx / screenWidth) * 100;
-        const deltaY = (gestureState.dy / screenHeight) * 100;
-        
-        // Calculate new position based on initial position + gesture delta
-        // Bounds to keep text fully on screen (accounting for text container size)
-        const newX = Math.max(15, Math.min(85, initialTextPosition.current.x + deltaX));
-        const newY = Math.max(15, Math.min(85, initialTextPosition.current.y + deltaY));
+        const newX = Math.max(10, Math.min(90, ((newPixelX + 50) / screenWidth) * 100));
+        const newY = Math.max(10, Math.min(90, ((newPixelY + 25) / screenHeight) * 100));
         
         setTextPosition({ x: newX, y: newY });
-        console.log(`📍 Text position: x=${newX.toFixed(1)}%, y=${newY.toFixed(1)}% | Pixel: left=${((screenWidth * newX / 100) - 50).toFixed(0)}px, top=${((screenHeight * newY / 100) - 25).toFixed(0)}px`);
+        console.log(`📍 Dragging: x=${newX.toFixed(1)}%, y=${newY.toFixed(1)}% | Pixels: ${newPixelX.toFixed(0)}px, ${newPixelY.toFixed(0)}px | Gesture: dx=${gestureState.dx.toFixed(0)}, dy=${gestureState.dy.toFixed(0)}`);
       },
       onPanResponderRelease: () => {
         setIsDraggingText(false);
+        console.log(`🏁 Drag ended at: ${textPosition.x.toFixed(1)}%, ${textPosition.y.toFixed(1)}%`);
       },
     });
 
