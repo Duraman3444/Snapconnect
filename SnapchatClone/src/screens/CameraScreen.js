@@ -71,9 +71,11 @@ export default function CameraScreen({ navigation }) {
   const [textOverlay, setTextOverlay] = useState('');
   const [showTextInput, setShowTextInput] = useState(false);
   const [textPosition, setTextPosition] = useState({ x: 50, y: 20 }); // percentage positions
+  const [isDraggingText, setIsDraggingText] = useState(false);
   const cameraRef = useRef();
   const recordingTimerRef = useRef(null);
   const photoEditorRef = useRef();
+  const initialTextPosition = useRef({ x: 50, y: 20 });
   const { currentUser, logout, supabase } = useAuth();
   const { currentTheme } = useTheme();
   
@@ -321,6 +323,7 @@ export default function CameraScreen({ navigation }) {
     setShowTextInput(false);
     setSelectedFilter(0);
     setTextPosition({ x: 50, y: 20 });
+    setIsDraggingText(false);
   };
 
   // RAG Feature #1: Smart Caption Generation
@@ -833,11 +836,12 @@ export default function CameraScreen({ navigation }) {
   // Photo Editor Screen
   if (photo && showPhotoEditor) {
     const filterPanResponder = PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
+      onStartShouldSetPanResponder: () => !isDraggingText,
       onMoveShouldSetPanResponder: (_, gestureState) => {
-        return Math.abs(gestureState.dx) > Math.abs(gestureState.dy) && Math.abs(gestureState.dx) > 20;
+        return !isDraggingText && Math.abs(gestureState.dx) > Math.abs(gestureState.dy) && Math.abs(gestureState.dx) > 20;
       },
       onPanResponderRelease: (_, gestureState) => {
+        if (isDraggingText) return;
         const { dx } = gestureState;
         const swipeThreshold = screenWidth * 0.15;
         
@@ -848,6 +852,34 @@ export default function CameraScreen({ navigation }) {
             handleFilterSwipe('left');
           }
         }
+      },
+    });
+
+    // Text drag handler
+    const textDragResponder = PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onPanResponderGrant: () => {
+        setIsDraggingText(true);
+        // Store the initial position when drag starts
+        initialTextPosition.current = { x: textPosition.x, y: textPosition.y };
+      },
+      onPanResponderMove: (event, gestureState) => {
+        // Get the screen dimensions
+        const screenHeight = Dimensions.get('window').height;
+        
+        // Calculate position change as percentage of screen from initial position
+        const deltaX = (gestureState.dx / screenWidth) * 100;
+        const deltaY = (gestureState.dy / screenHeight) * 100;
+        
+        // Calculate new position based on initial position + gesture delta
+        const newX = Math.max(10, Math.min(90, initialTextPosition.current.x + deltaX));
+        const newY = Math.max(15, Math.min(80, initialTextPosition.current.y + deltaY));
+        
+        setTextPosition({ x: newX, y: newY });
+      },
+      onPanResponderRelease: () => {
+        setIsDraggingText(false);
       },
     });
 
@@ -879,32 +911,47 @@ export default function CameraScreen({ navigation }) {
             
                       {/* Text overlay */}
           {textOverlay && (
-            <TouchableOpacity
+            <View
               style={{
                 position: 'absolute',
                 left: `${textPosition.x}%`,
                 top: `${textPosition.y}%`,
                 transform: [{ translateX: -50 }, { translateY: -50 }],
               }}
-              onPress={() => setShowTextInput(true)}
-              activeOpacity={0.8}
+              {...textDragResponder.panHandlers}
             >
-              <Text 
+              <TouchableOpacity
+                onPress={() => {
+                  if (!isDraggingText) {
+                    setShowTextInput(true);
+                  }
+                }}
+                activeOpacity={isDraggingText ? 1 : 0.8}
                 style={{
-                  color: 'white',
-                  fontSize: 24,
-                  fontWeight: 'bold',
-                  textAlign: 'center',
-                  textShadowColor: 'rgba(0, 0, 0, 0.75)',
-                  textShadowOffset: { width: -1, height: 1 },
-                  textShadowRadius: 10,
-                  paddingHorizontal: 10,
-                  paddingVertical: 5,
+                  backgroundColor: isDraggingText ? 'rgba(107, 70, 193, 0.3)' : 'transparent',
+                  borderRadius: 8,
+                  borderWidth: isDraggingText ? 2 : 0,
+                  borderColor: '#6B46C1',
+                  borderStyle: isDraggingText ? 'dashed' : 'solid',
                 }}
               >
-                {textOverlay}
-              </Text>
-            </TouchableOpacity>
+                <Text 
+                  style={{
+                    color: 'white',
+                    fontSize: 24,
+                    fontWeight: 'bold',
+                    textAlign: 'center',
+                    textShadowColor: 'rgba(0, 0, 0, 0.75)',
+                    textShadowOffset: { width: -1, height: 1 },
+                    textShadowRadius: 10,
+                    paddingHorizontal: 10,
+                    paddingVertical: 5,
+                  }}
+                >
+                  {textOverlay}
+                </Text>
+              </TouchableOpacity>
+            </View>
           )}
           </View>
         </ViewShot>
@@ -957,7 +1004,7 @@ export default function CameraScreen({ navigation }) {
           </View>
           <Text style={styles.swipeHint}>← Swipe for filters →</Text>
           <Text style={[styles.swipeHint, { marginTop: 5, fontSize: 11 }]}>
-            Tap 🤖 for AI caption • Tap Aa for text • Tap text to edit
+            Tap 🤖 for AI caption • Tap Aa for text • Drag text to move • Tap text to edit
           </Text>
         </View>
 
