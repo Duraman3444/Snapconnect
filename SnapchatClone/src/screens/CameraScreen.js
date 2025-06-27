@@ -70,12 +70,12 @@ export default function CameraScreen({ navigation }) {
   const [selectedFilter, setSelectedFilter] = useState(0);
   const [textOverlay, setTextOverlay] = useState('');
   const [showTextInput, setShowTextInput] = useState(false);
-  const [textPosition, setTextPosition] = useState({ x: 50, y: 20 }); // percentage positions
+  const [textPosition, setTextPosition] = useState({ x: 50, y: 40 }); // percentage positions
   const [isDraggingText, setIsDraggingText] = useState(false);
   const cameraRef = useRef();
   const recordingTimerRef = useRef(null);
   const photoEditorRef = useRef();
-  const initialTextPosition = useRef({ x: 50, y: 20 });
+  const initialTextPosition = useRef({ x: 50, y: 40 });
   const { currentUser, logout, supabase } = useAuth();
   const { currentTheme } = useTheme();
   
@@ -322,7 +322,7 @@ export default function CameraScreen({ navigation }) {
     setTextOverlay('');
     setShowTextInput(false);
     setSelectedFilter(0);
-    setTextPosition({ x: 50, y: 20 });
+    setTextPosition({ x: 50, y: 40 });
     setIsDraggingText(false);
   };
 
@@ -527,6 +527,8 @@ export default function CameraScreen({ navigation }) {
       // Set the first generated caption as text overlay
       if (result.suggestions && result.suggestions.length > 0) {
         setTextOverlay(result.suggestions[0]);
+        // Reset text position to center when new caption is generated
+        setTextPosition({ x: 50, y: 40 });
         console.log('✅ AI caption applied:', result.suggestions[0]);
         
         // Show success feedback
@@ -543,6 +545,8 @@ export default function CameraScreen({ navigation }) {
       ];
       const randomCaption = fallbackCaptions[Math.floor(Math.random() * fallbackCaptions.length)];
       setTextOverlay(randomCaption);
+      // Reset text position to center when new caption is generated
+      setTextPosition({ x: 50, y: 40 });
       
       Alert.alert('AI Caption Generated! 🤖', `Caption: "${randomCaption}"\n\nTap the text on the photo to edit it, or tap "Aa" to change it.`);
     } finally {
@@ -873,10 +877,12 @@ export default function CameraScreen({ navigation }) {
         const deltaY = (gestureState.dy / screenHeight) * 100;
         
         // Calculate new position based on initial position + gesture delta
-        const newX = Math.max(10, Math.min(90, initialTextPosition.current.x + deltaX));
-        const newY = Math.max(15, Math.min(80, initialTextPosition.current.y + deltaY));
+        // More conservative bounds to account for text centering transform
+        const newX = Math.max(20, Math.min(80, initialTextPosition.current.x + deltaX));
+        const newY = Math.max(25, Math.min(75, initialTextPosition.current.y + deltaY));
         
         setTextPosition({ x: newX, y: newY });
+        console.log(`📍 Text position: x=${newX.toFixed(1)}%, y=${newY.toFixed(1)}%`);
       },
       onPanResponderRelease: () => {
         setIsDraggingText(false);
@@ -933,6 +939,10 @@ export default function CameraScreen({ navigation }) {
                   borderWidth: isDraggingText ? 2 : 0,
                   borderColor: '#6B46C1',
                   borderStyle: isDraggingText ? 'dashed' : 'solid',
+                  minWidth: 50,
+                  minHeight: 30,
+                  justifyContent: 'center',
+                  alignItems: 'center',
                 }}
               >
                 <Text 
