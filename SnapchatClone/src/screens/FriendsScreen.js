@@ -14,6 +14,9 @@ export default function FriendsScreen({ navigation }) {
   const [pendingRequests, setPendingRequests] = useState([]);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  // Group messaging state
+  const [groupChats, setGroupChats] = useState([]);
+  const [activeTab, setActiveTab] = useState('friends'); // 'friends' or 'groups'
   // AI-related state
   const [showAIAssistant, setShowAIAssistant] = useState(false);
   const [userProfile, setUserProfile] = useState({});
@@ -39,6 +42,7 @@ export default function FriendsScreen({ navigation }) {
     if (currentUser) {
       loadFriends();
       loadPendingRequests();
+      loadGroupChats();
       loadUserProfile();
       generateAIFriendSuggestions();
     }
@@ -106,6 +110,80 @@ export default function FriendsScreen({ navigation }) {
       setPendingRequests(requestProfiles);
     } catch (error) {
       console.error('Error loading pending requests:', error);
+    }
+  };
+
+  const loadGroupChats = async () => {
+    try {
+      if (!currentUser?.id) return;
+
+      // Get group conversations user is part of
+      const { data: groupParticipants, error: participantsError } = await supabase
+        .from('group_participants')
+        .select(`
+          conversation_id,
+          conversations:conversation_id (
+            id,
+            name,
+            description,
+            created_at,
+            created_by
+          )
+        `)
+        .eq('user_id', currentUser.id);
+
+      if (participantsError) {
+        console.error('Error loading group participants:', participantsError);
+        return;
+      }
+
+      // Get recent messages for each group
+      const groupsWithMessages = await Promise.all(
+        groupParticipants.map(async (participant) => {
+          const conversation = participant.conversations;
+          if (!conversation) return null;
+
+          // Get the most recent message for this group
+          const { data: recentMessage, error: messageError } = await supabase
+            .from('messages')
+            .select(`
+              *,
+              sender:profiles!messages_sender_id_fkey(username)
+            `)
+            .eq('conversation_id', conversation.id)
+            .order('created_at', { ascending: false })
+            .limit(1);
+
+          if (messageError) {
+            console.error('Error loading recent message:', messageError);
+          }
+
+          // Get participant count
+          const { data: participantCount, error: countError } = await supabase
+            .from('group_participants')
+            .select('user_id')
+            .eq('conversation_id', conversation.id);
+
+          return {
+            ...conversation,
+            recentMessage: recentMessage?.[0] || null,
+            participantCount: participantCount?.length || 0
+          };
+        })
+      );
+
+      // Filter out null entries and sort by most recent activity
+      const validGroups = groupsWithMessages
+        .filter(group => group !== null)
+        .sort((a, b) => {
+          const aTime = a.recentMessage?.created_at || a.created_at;
+          const bTime = b.recentMessage?.created_at || b.created_at;
+          return new Date(bTime) - new Date(aTime);
+        });
+
+      setGroupChats(validGroups);
+    } catch (error) {
+      console.error('Error loading group chats:', error);
     }
   };
 
@@ -435,10 +513,97 @@ export default function FriendsScreen({ navigation }) {
 
   const onRefresh = () => {
     setRefreshing(true);
-    Promise.all([loadFriends(), loadPendingRequests()]).finally(() => {
+    Promise.all([
+      loadFriends(), 
+      loadPendingRequests(),
+      loadGroupChats()
+    ]).finally(() => {
       setRefreshing(false);
     });
   };
+
+  const navigateToGroupChat = (group) => {
+    navigation.navigate('Chat', {
+      conversationId: group.id,
+      isGroup: true,
+      groupName: group.name,
+      groupDescription: group.description
+    });
+  };
+
+  const createNewGroup = () => {
+    navigation.navigate('CreateGroup');
+  };
+
+  const renderGroupChat = ({ item }) => (
+    <TouchableOpacity
+      style={[{
+        backgroundColor: currentTheme.surface,
+        borderRadius: 16,
+        marginHorizontal: 16,
+        marginBottom: 12,
+        padding: 16,
+        borderWidth: 1,
+        borderColor: currentTheme.border,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+        elevation: 3
+      }]}
+      onPress={() => navigateToGroupChat(item)}
+    >
+      <View style={[{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }]}>
+        <View style={[{
+          backgroundColor: currentTheme.primary,
+          borderRadius: 24,
+          width: 48,
+          height: 48,
+          justifyContent: 'center',
+          alignItems: 'center',
+          marginRight: 12
+        }]}>
+          <Text style={[{ color: currentTheme.background, fontWeight: 'bold', fontSize: 18 }]}>
+            👥
+          </Text>
+        </View>
+        <View style={[{ flex: 1 }]}>
+          <Text style={[{ color: currentTheme.text, fontSize: 16, fontWeight: 'bold', marginBottom: 2 }]}>
+            {item.name || 'Unnamed Group'}
+          </Text>
+          <Text style={[{ color: currentTheme.textSecondary, fontSize: 12 }]}>
+            {item.participantCount} members
+          </Text>
+        </View>
+        <View style={[{ alignItems: 'flex-end' }]}>
+          {item.recentMessage && (
+            <Text style={[{ color: currentTheme.textSecondary, fontSize: 11 }]}>
+              {new Date(item.recentMessage.created_at).toLocaleDateString()}
+            </Text>
+          )}
+        </View>
+      </View>
+      
+      {item.recentMessage && (
+        <View style={[{ backgroundColor: currentTheme.background, borderRadius: 8, padding: 8 }]}>
+          <Text style={[{ color: currentTheme.textSecondary, fontSize: 12, marginBottom: 2 }]}>
+            {item.recentMessage.sender?.username || 'Someone'}: 
+          </Text>
+          <Text style={[{ color: currentTheme.text, fontSize: 14 }]} numberOfLines={2}>
+            {item.recentMessage.content}
+          </Text>
+        </View>
+      )}
+      
+      {!item.recentMessage && (
+        <View style={[{ backgroundColor: currentTheme.background, borderRadius: 8, padding: 8 }]}>
+          <Text style={[{ color: currentTheme.textSecondary, fontSize: 14, fontStyle: 'italic' }]}>
+            No messages yet. Start the conversation!
+          </Text>
+        </View>
+      )}
+    </TouchableOpacity>
+  );
 
   return (
     <View style={[{ flex: 1, backgroundColor: currentTheme.background }]} {...panResponder.panHandlers}>
@@ -474,36 +639,114 @@ export default function FriendsScreen({ navigation }) {
           </View>
         </View>
         
-        <View style={[{ alignItems: 'center' }]}>
-          <Text style={[{ fontSize: 30, fontWeight: 'bold', color: currentTheme.primary, textAlign: 'center', marginBottom: 8 }]}>👥 Friends</Text>
+        <View style={[{ alignItems: 'center', marginBottom: 16 }]}>
+          <Text style={[{ fontSize: 30, fontWeight: 'bold', color: currentTheme.primary, textAlign: 'center', marginBottom: 8 }]}>
+            {activeTab === 'friends' ? '👥 Friends' : '💬 Groups'}
+          </Text>
           <Text style={[{ color: currentTheme.textSecondary, textAlign: 'center' }]}>
-            Connect with friends and share moments! ✨
+            {activeTab === 'friends' 
+              ? 'Connect with friends and share moments! ✨'
+              : 'Chat with your groups and stay connected! 🎉'
+            }
           </Text>
         </View>
-      </View>
 
-      {/* Search Bar */}
-      <View style={[{ paddingHorizontal: 16, paddingTop: 24 }]}>
-        <View style={[{ backgroundColor: currentTheme.surface, borderRadius: 24, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 24, paddingVertical: 16, borderWidth: 1, borderColor: currentTheme.border }]}>
-          <TextInput
-            style={[styles.searchInput, { color: currentTheme.text }]}
-            placeholder="Search by username..."
-            placeholderTextColor={currentTheme.textSecondary}
-            value={searchText}
-            onChangeText={setSearchText}
-            onSubmitEditing={searchUsers}
-          />
+        {/* Tab Selector */}
+        <View style={[{ flexDirection: 'row', backgroundColor: currentTheme.surface, borderRadius: 12, padding: 4, borderWidth: 1, borderColor: currentTheme.border }]}>
           <TouchableOpacity
-            onPress={searchUsers}
-            style={[{ backgroundColor: currentTheme.primary, borderRadius: 20, paddingHorizontal: 16, paddingVertical: 8, marginLeft: 8 }]}
-            disabled={loading}
+            style={[{
+              flex: 1,
+              paddingVertical: 12,
+              paddingHorizontal: 16,
+              borderRadius: 8,
+              backgroundColor: activeTab === 'friends' ? currentTheme.primary : 'transparent'
+            }]}
+            onPress={() => setActiveTab('friends')}
           >
-            <Text style={[{ color: currentTheme.background, fontWeight: 'bold' }]}>
-              {loading ? '⏳' : '🔍'}
+            <Text style={[{
+              textAlign: 'center',
+              fontWeight: '600',
+              fontSize: 14,
+              color: activeTab === 'friends' ? currentTheme.background : currentTheme.text
+            }]}>
+              👥 Friends ({friends.length})
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[{
+              flex: 1,
+              paddingVertical: 12,
+              paddingHorizontal: 16,
+              borderRadius: 8,
+              backgroundColor: activeTab === 'groups' ? currentTheme.primary : 'transparent'
+            }]}
+            onPress={() => setActiveTab('groups')}
+          >
+            <Text style={[{
+              textAlign: 'center',
+              fontWeight: '600',
+              fontSize: 14,
+              color: activeTab === 'groups' ? currentTheme.background : currentTheme.text
+            }]}>
+              💬 Groups ({groupChats.length})
             </Text>
           </TouchableOpacity>
         </View>
       </View>
+
+      {/* Search Bar - Only for Friends tab */}
+      {activeTab === 'friends' && (
+        <View style={[{ paddingHorizontal: 16, paddingTop: 24 }]}>
+          <View style={[{ backgroundColor: currentTheme.surface, borderRadius: 24, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 24, paddingVertical: 16, borderWidth: 1, borderColor: currentTheme.border }]}>
+            <TextInput
+              style={[styles.searchInput, { color: currentTheme.text }]}
+              placeholder="Search by username..."
+              placeholderTextColor={currentTheme.textSecondary}
+              value={searchText}
+              onChangeText={setSearchText}
+              onSubmitEditing={searchUsers}
+            />
+            <TouchableOpacity
+              onPress={searchUsers}
+              style={[{ backgroundColor: currentTheme.primary, borderRadius: 20, paddingHorizontal: 16, paddingVertical: 8, marginLeft: 8 }]}
+              disabled={loading}
+            >
+              <Text style={[{ color: currentTheme.background, fontWeight: 'bold' }]}>
+                {loading ? '⏳' : '🔍'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+
+      {/* Create Group Button - Only for Groups tab */}
+      {activeTab === 'groups' && (
+        <View style={[{ paddingHorizontal: 16, paddingTop: 24 }]}>
+          <TouchableOpacity
+            style={[{
+              backgroundColor: currentTheme.primary,
+              borderRadius: 16,
+              padding: 16,
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'center',
+              borderWidth: 1,
+              borderColor: currentTheme.border,
+              shadowColor: '#000',
+              shadowOffset: { width: 0, height: 2 },
+              shadowOpacity: 0.1,
+              shadowRadius: 4,
+              elevation: 3
+            }]}
+            onPress={createNewGroup}
+          >
+            <Text style={[{ color: currentTheme.background, fontSize: 18, marginRight: 8 }]}>➕</Text>
+            <Text style={[{ color: currentTheme.background, fontSize: 16, fontWeight: 'bold' }]}>
+              Create New Group
+            </Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       <FlatList
         data={[]}
@@ -512,63 +755,107 @@ export default function FriendsScreen({ navigation }) {
         onRefresh={onRefresh}
         ListHeaderComponent={
           <View>
-            {/* Pending Requests Section */}
-            {pendingRequests.length > 0 && (
-              <View style={[{ paddingHorizontal: 16, paddingTop: 24 }]}>
-                <Text style={[{ fontSize: 20, fontWeight: 'bold', color: currentTheme.primary, marginBottom: 16, textAlign: 'center' }]}>
-                  Friend Requests ({pendingRequests.length})
-                </Text>
-                {pendingRequests.map(request => (
-                  <View key={request.id}>
-                    {renderPendingRequest({ item: request })}
+            {activeTab === 'friends' ? (
+              <>
+                {/* Pending Requests Section */}
+                {pendingRequests.length > 0 && (
+                  <View style={[{ paddingHorizontal: 16, paddingTop: 24 }]}>
+                    <Text style={[{ fontSize: 20, fontWeight: 'bold', color: currentTheme.primary, marginBottom: 16, textAlign: 'center' }]}>
+                      Friend Requests ({pendingRequests.length})
+                    </Text>
+                    {pendingRequests.map(request => (
+                      <View key={request.id}>
+                        {renderPendingRequest({ item: request })}
+                      </View>
+                    ))}
                   </View>
-                ))}
-              </View>
-            )}
+                )}
 
-            {/* My Friends Section */}
-            <View style={[{ paddingHorizontal: 16, paddingTop: 24 }]}>
-              <Text style={[{ fontSize: 20, fontWeight: 'bold', color: currentTheme.primary, marginBottom: 16, textAlign: 'center' }]}>
-                My Friends ({friends.length})
-              </Text>
-              
-              {friends.length === 0 ? (
-                <View style={[{ alignItems: 'center', paddingVertical: 32 }]}>
-                  <Text style={[{ fontSize: 32, marginBottom: 16 }]}>👤</Text>
-                  <Text style={[{ fontSize: 18, color: currentTheme.textSecondary, textAlign: 'center' }]}>
-                    No friends yet! Start by searching above. 🔍
+                {/* My Friends Section */}
+                <View style={[{ paddingHorizontal: 16, paddingTop: 24 }]}>
+                  <Text style={[{ fontSize: 20, fontWeight: 'bold', color: currentTheme.primary, marginBottom: 16, textAlign: 'center' }]}>
+                    My Friends ({friends.length})
                   </Text>
+                  
+                  {friends.length === 0 ? (
+                    <View style={[{ alignItems: 'center', paddingVertical: 32 }]}>
+                      <Text style={[{ fontSize: 32, marginBottom: 16 }]}>👤</Text>
+                      <Text style={[{ fontSize: 18, color: currentTheme.textSecondary, textAlign: 'center' }]}>
+                        No friends yet! Start by searching above. 🔍
+                      </Text>
+                    </View>
+                  ) : (
+                    friends.map(friend => (
+                      <View key={friend.id}>
+                        {renderFriend({ item: friend })}
+                      </View>
+                    ))
+                  )}
                 </View>
-              ) : (
-                friends.map(friend => (
-                  <View key={friend.id}>
-                    {renderFriend({ item: friend })}
-                  </View>
-                ))
-              )}
-            </View>
 
-            {/* Search Results */}
-            {searchResults.length > 0 && (
-              <View style={[{ paddingHorizontal: 16, paddingTop: 24 }]}>
-                <Text style={[{ fontSize: 20, fontWeight: 'bold', color: currentTheme.primary, marginBottom: 16, textAlign: 'center' }]}>
-                  Search Results ({searchResults.length})
-                </Text>
-                {searchResults.map(result => (
-                  <View key={result.id}>
-                    {renderSearchResult({ item: result })}
+                {/* Search Results */}
+                {searchResults.length > 0 && (
+                  <View style={[{ paddingHorizontal: 16, paddingTop: 24 }]}>
+                    <Text style={[{ fontSize: 20, fontWeight: 'bold', color: currentTheme.primary, marginBottom: 16, textAlign: 'center' }]}>
+                      Search Results ({searchResults.length})
+                    </Text>
+                    {searchResults.map(result => (
+                      <View key={result.id}>
+                        {renderSearchResult({ item: result })}
+                      </View>
+                    ))}
                   </View>
-                ))}
-              </View>
-            )}
+                )}
 
-            {/* No Results Message */}
-            {searchText.length > 0 && searchResults.length === 0 && !loading && (
-              <View style={[{ justifyContent: 'center', alignItems: 'center', paddingHorizontal: 32, paddingVertical: 40 }]}>
-                <Text style={[{ fontSize: 32, marginBottom: 16 }]}>🔍</Text>
-                <Text style={[{ fontSize: 18, color: currentTheme.textSecondary, textAlign: 'center' }]}>
-                  No users found with that username. Try a different search! 
-                </Text>
+                {/* No Results Message */}
+                {searchText.length > 0 && searchResults.length === 0 && !loading && (
+                  <View style={[{ justifyContent: 'center', alignItems: 'center', paddingHorizontal: 32, paddingVertical: 40 }]}>
+                    <Text style={[{ fontSize: 32, marginBottom: 16 }]}>🔍</Text>
+                    <Text style={[{ fontSize: 18, color: currentTheme.textSecondary, textAlign: 'center' }]}>
+                      No users found with that username. Try a different search! 
+                    </Text>
+                  </View>
+                )}
+              </>
+            ) : (
+              /* Groups Tab Content */
+              <View style={[{ paddingTop: 24 }]}>
+                {groupChats.length === 0 ? (
+                  <View style={[{ alignItems: 'center', paddingVertical: 40, paddingHorizontal: 32 }]}>
+                    <Text style={[{ fontSize: 48, marginBottom: 16 }]}>💬</Text>
+                    <Text style={[{ fontSize: 20, fontWeight: 'bold', color: currentTheme.text, textAlign: 'center', marginBottom: 8 }]}>
+                      No Group Chats Yet
+                    </Text>
+                    <Text style={[{ fontSize: 16, color: currentTheme.textSecondary, textAlign: 'center', marginBottom: 24 }]}>
+                      Create your first group to start chatting with multiple friends at once!
+                    </Text>
+                    <TouchableOpacity
+                      style={[{
+                        backgroundColor: currentTheme.accent,
+                        borderRadius: 12,
+                        paddingHorizontal: 24,
+                        paddingVertical: 12
+                      }]}
+                      onPress={createNewGroup}
+                    >
+                      <Text style={[{ color: currentTheme.background, fontWeight: 'bold', fontSize: 16 }]}>
+                        ➕ Create Group
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                ) : (
+                  /* Groups List */
+                  <View>
+                    <Text style={[{ fontSize: 20, fontWeight: 'bold', color: currentTheme.primary, marginBottom: 16, textAlign: 'center' }]}>
+                      My Groups ({groupChats.length})
+                    </Text>
+                    {groupChats.map(group => (
+                      <View key={group.id}>
+                        {renderGroupChat({ item: group })}
+                      </View>
+                    ))}
+                  </View>
+                )}
               </View>
             )}
           </View>
