@@ -11,7 +11,8 @@ import {
   Keyboard,
   Image,
   Dimensions,
-  ScrollView
+  ScrollView,
+  Modal
 } from 'react-native';
 import { Video } from 'expo-av';
 import { useAuth } from '../context/SupabaseAuthContext';
@@ -38,11 +39,26 @@ export default function ChatScreen({ navigation, route }) {
   const [aiSuggestions, setAiSuggestions] = useState([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [userProfile, setUserProfile] = useState({});
+  // Mood selection state
+  const [showMoodSelector, setShowMoodSelector] = useState(false);
+  const [selectedMood, setSelectedMood] = useState('friendly');
   
   const { currentUser, supabase } = useAuth();
   const { currentTheme } = useTheme();
   const flatListRef = useRef();
   const messageTimers = useRef(new Map()); // Track countdown timers for messages
+
+  // Mood options for AI suggestions
+  const moodOptions = [
+    { id: 'friendly', name: 'Friendly', emoji: '😊', color: '#10b981', description: 'Warm and welcoming' },
+    { id: 'playful', name: 'Playful', emoji: '😜', color: '#f59e0b', description: 'Fun and energetic' },
+    { id: 'chill', name: 'Chill', emoji: '😎', color: '#06b6d4', description: 'Relaxed and casual' },
+    { id: 'stressed', name: 'Stressed', emoji: '😤', color: '#ef4444', description: 'Overwhelmed or busy' },
+    { id: 'flirty', name: 'Flirty', emoji: '😏', color: '#ec4899', description: 'Romantic and charming' },
+    { id: 'sarcastic', name: 'Sarcastic', emoji: '🙄', color: '#8b5cf6', description: 'Witty and sharp' },
+    { id: 'supportive', name: 'Supportive', emoji: '🤗', color: '#84cc16', description: 'Caring and encouraging' },
+    { id: 'excited', name: 'Excited', emoji: '🤩', color: '#f97316', description: 'Enthusiastic and energetic' }
+  ];
 
   // Safety check - if we don't have required data, go back
   React.useEffect(() => {
@@ -209,8 +225,8 @@ export default function ChatScreen({ navigation, route }) {
     }
   };
 
-  // Generate AI message suggestions with enhanced context
-  const generateAISuggestions = async () => {
+  // Generate AI message suggestions with mood
+  const generateAISuggestions = async (mood = selectedMood) => {
     try {
       const recentMessages = messages.slice(-5).map(m => m.content);
       const conversationContext = {
@@ -218,7 +234,7 @@ export default function ChatScreen({ navigation, route }) {
         chatType: isGroup ? 'group' : 'individual',
         relationship: 'friend',
         context: 'casual',
-        mood: 'friendly',
+        mood: mood, // Include selected mood
         groupSize: isGroup ? groupParticipants.length : 2,
         conversationLength: messages.length
       };
@@ -244,6 +260,7 @@ export default function ChatScreen({ navigation, route }) {
       
       setAiSuggestions(result.suggestions);
       setShowSuggestions(true);
+      setShowMoodSelector(false); // Close mood selector
       
       // Log context explanation if available
       if (result.contextExplanation) {
@@ -251,15 +268,38 @@ export default function ChatScreen({ navigation, route }) {
       }
     } catch (error) {
       console.error('Error generating AI suggestions:', error);
-      // Fallback to basic suggestions
-      setAiSuggestions([
-        "That's interesting! 😊",
-        "Tell me more about that",
-        "How are you feeling about it?",
-        "Want to hang out later?"
-      ]);
+      // Fallback to basic suggestions with mood
+      const moodBasedFallbacks = getMoodBasedFallbacks(mood);
+      setAiSuggestions(moodBasedFallbacks);
       setShowSuggestions(true);
+      setShowMoodSelector(false);
     }
+  };
+
+  // Fallback suggestions based on mood
+  const getMoodBasedFallbacks = (mood) => {
+    const fallbacks = {
+      friendly: ["That's awesome! 😊", "How are you doing?", "Hope you're having a great day!", "Tell me more about that!"],
+      playful: ["Haha that's hilarious! 😂", "You're so funny!", "Let's do something fun!", "Ready for an adventure? 🎉"],
+      chill: ["Cool cool 😎", "No worries", "Sounds good to me", "Whatever works for you"],
+      stressed: ["Ugh I feel you 😤", "So much to do!", "This is overwhelming", "Need a break ASAP"],
+      flirty: ["You're looking good today 😏", "Hey gorgeous", "Miss you ❤️", "Can't wait to see you"],
+      sarcastic: ["Oh really? 🙄", "How surprising...", "That's just great", "Wow, never saw that coming"],
+      supportive: ["You've got this! 💪", "I believe in you", "Here if you need me 🤗", "You're amazing!"],
+      excited: ["OMG YES! 🤩", "This is SO cool!", "I can't even! ✨", "BEST DAY EVER!"]
+    };
+    return fallbacks[mood] || fallbacks.friendly;
+  };
+
+  // Handle mood selection
+  const handleMoodSelect = (mood) => {
+    setSelectedMood(mood.id);
+    generateAISuggestions(mood.id);
+  };
+
+  // Show mood selector instead of directly generating suggestions
+  const showMoodSelection = () => {
+    setShowMoodSelector(true);
   };
 
   // Handle AI suggestion selection
@@ -1097,7 +1137,7 @@ export default function ChatScreen({ navigation, route }) {
 
         {/* AI Suggestions Button */}
         <TouchableOpacity
-          onPress={generateAISuggestions}
+          onPress={showMoodSelection}
           style={[{
             backgroundColor: '#4A90E2',
             borderRadius: 22,
@@ -1221,6 +1261,160 @@ export default function ChatScreen({ navigation, route }) {
           relationship: 'friend'
         }}
       />
+
+      {/* Mood Selector Modal */}
+      <Modal
+        visible={showMoodSelector}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowMoodSelector(false)}
+      >
+        <View style={{
+          flex: 1,
+          backgroundColor: 'rgba(0, 0, 0, 0.5)',
+          justifyContent: 'flex-end'
+        }}>
+          <View style={{
+            backgroundColor: currentTheme.surface,
+            borderTopLeftRadius: 24,
+            borderTopRightRadius: 24,
+            paddingHorizontal: 20,
+            paddingTop: 20,
+            paddingBottom: Platform.OS === 'ios' ? 40 : 20,
+            maxHeight: '70%'
+          }}>
+            {/* Header */}
+            <View style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              marginBottom: 20
+            }}>
+              <Text style={{
+                fontSize: 20,
+                fontWeight: 'bold',
+                color: currentTheme.text
+              }}>
+                🎭 Add Your Mood to Context
+              </Text>
+              <TouchableOpacity
+                onPress={() => setShowMoodSelector(false)}
+                style={{
+                  backgroundColor: currentTheme.border,
+                  borderRadius: 15,
+                  width: 30,
+                  height: 30,
+                  justifyContent: 'center',
+                  alignItems: 'center'
+                }}
+              >
+                <Text style={{ color: currentTheme.text, fontSize: 16 }}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Context Explanation */}
+            <View style={{
+              backgroundColor: currentTheme.background,
+              borderRadius: 12,
+              padding: 12,
+              marginBottom: 16,
+              borderWidth: 1,
+              borderColor: currentTheme.border
+            }}>
+              <Text style={{
+                fontSize: 14,
+                color: currentTheme.textSecondary,
+                marginBottom: 4
+              }}>
+                AI will respond to your conversation context first, then add your mood flavor:
+              </Text>
+              <Text style={{
+                fontSize: 16,
+                fontWeight: 'bold',
+                color: currentTheme.primary
+              }}>
+                {moodOptions.find(m => m.id === selectedMood)?.emoji} Current mood: {moodOptions.find(m => m.id === selectedMood)?.name}
+              </Text>
+            </View>
+
+            {/* Mood Grid */}
+            <ScrollView showsVerticalScrollIndicator={false}>
+              <View style={{
+                flexDirection: 'row',
+                flexWrap: 'wrap',
+                justifyContent: 'space-between'
+              }}>
+                {moodOptions.map((mood) => (
+                  <TouchableOpacity
+                    key={mood.id}
+                    onPress={() => handleMoodSelect(mood)}
+                    style={{
+                      width: '48%',
+                      backgroundColor: selectedMood === mood.id ? mood.color : currentTheme.background,
+                      borderRadius: 16,
+                      padding: 16,
+                      marginBottom: 12,
+                      borderWidth: 2,
+                      borderColor: selectedMood === mood.id ? mood.color : currentTheme.border,
+                      alignItems: 'center'
+                    }}
+                  >
+                    <Text style={{
+                      fontSize: 32,
+                      marginBottom: 8
+                    }}>
+                      {mood.emoji}
+                    </Text>
+                    <Text style={{
+                      fontSize: 16,
+                      fontWeight: 'bold',
+                      color: selectedMood === mood.id ? 'white' : currentTheme.text,
+                      marginBottom: 4,
+                      textAlign: 'center'
+                    }}>
+                      {mood.name}
+                    </Text>
+                    <Text style={{
+                      fontSize: 12,
+                      color: selectedMood === mood.id ? 'rgba(255,255,255,0.8)' : currentTheme.textSecondary,
+                      textAlign: 'center'
+                    }}>
+                      {mood.description}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              {/* Quick Generate Button */}
+              <TouchableOpacity
+                onPress={() => generateAISuggestions(selectedMood)}
+                style={{
+                  backgroundColor: '#4A90E2',
+                  borderRadius: 20,
+                  paddingVertical: 16,
+                  marginTop: 16,
+                  alignItems: 'center'
+                }}
+              >
+                <Text style={{
+                  color: 'white',
+                  fontSize: 16,
+                  fontWeight: 'bold'
+                }}>
+                  🤖 Generate Context-Based Suggestions
+                </Text>
+                <Text style={{
+                  color: 'rgba(255,255,255,0.8)',
+                  fontSize: 12,
+                  marginTop: 4
+                }}>
+                  with {moodOptions.find(m => m.id === selectedMood)?.name.toLowerCase()} mood
+                </Text>
+              </TouchableOpacity>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </KeyboardAvoidingView>
   );
 } 

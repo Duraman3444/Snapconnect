@@ -4,6 +4,10 @@ import { Video } from 'expo-av';
 import { useAuth } from '../context/SupabaseAuthContext';
 import { useTheme } from '../context/ThemeContext';
 import ImageWithFallback from '../components/ImageWithFallback';
+import AIAssistant from '../components/AIAssistant';
+import FloatingAIButton from '../components/FloatingAIButton';
+import ragService from '../services/ragService';
+import userProfileService from '../services/userProfileService';
 
 const { width, height } = Dimensions.get('window');
 
@@ -13,6 +17,10 @@ export default function StoriesScreen({ navigation, route }) {
   const [friendStories, setFriendStories] = useState([]);
   const [followingStories, setFollowingStories] = useState([]);
   const [loading, setLoading] = useState(true);
+  // AI-related state
+  const [showAIAssistant, setShowAIAssistant] = useState(false);
+  const [userProfile, setUserProfile] = useState({});
+  const [storyIdeas, setStoryIdeas] = useState([]);
   const { snap } = route?.params || {};
   const { currentUser, supabase } = useAuth();
   const { currentTheme } = useTheme();
@@ -48,6 +56,8 @@ export default function StoriesScreen({ navigation, route }) {
     } else {
       // Load all available stories
       loadStories();
+      loadUserProfile();
+      generateStoryIdeas();
     }
   }, [snap, navigation]);
 
@@ -161,6 +171,36 @@ export default function StoriesScreen({ navigation, route }) {
       console.error('Load stories error:', error);
       setLoading(false);
     }
+  };
+
+  const loadUserProfile = async () => {
+    try {
+      const profile = await userProfileService.getMockUserProfile(currentUser.id);
+      setUserProfile(profile);
+    } catch (error) {
+      console.error('Error loading user profile:', error);
+    }
+  };
+
+  const generateStoryIdeas = async () => {
+    try {
+      const profile = await userProfileService.getMockUserProfile(currentUser.id);
+      const contentIdeas = await ragService.generateContentIdeas(
+        profile,
+        [],
+        { platform: 'stories' }
+      );
+      setStoryIdeas(contentIdeas.ideas || []);
+    } catch (error) {
+      console.error('Error generating story ideas:', error);
+    }
+  };
+
+  const handleAISuggestionSelect = (suggestion) => {
+    Alert.alert('AI Story Idea', `"${suggestion}"\n\nWould you like to create a story with this idea?`, [
+      { text: 'Maybe Later', style: 'cancel' },
+      { text: 'Create Story', onPress: () => navigation.navigate('Camera') }
+    ]);
   };
 
   const addStoryViewer = async (storyId) => {
@@ -581,6 +621,32 @@ export default function StoriesScreen({ navigation, route }) {
           <View style={{ height: 100 }} />
         </ScrollView>
       )}
+
+      {/* Floating AI Assistant Button */}
+      <FloatingAIButton
+        onPress={() => setShowAIAssistant(true)}
+        visible={!snap} // Hide when viewing a specific snap
+      />
+
+      {/* AI Assistant Modal */}
+      <AIAssistant
+        visible={showAIAssistant}
+        onClose={() => setShowAIAssistant(false)}
+        context="stories"
+        onSuggestionSelect={handleAISuggestionSelect}
+        userProfile={userProfile}
+        conversationData={{
+          messages: [],
+          chatType: 'assistant',
+          relationship: 'ai_helper',
+          context: {
+            screen: 'stories',
+            hasStories: stories.length > 0,
+            friendStoriesCount: friendStories.length,
+            storyIdeas: storyIdeas
+          }
+        }}
+      />
     </SafeAreaView>
   );
 } 

@@ -2,6 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, TextInput, TouchableOpacity, FlatList, Alert, StyleSheet, PanResponder } from 'react-native';
 import { useAuth } from '../context/SupabaseAuthContext';
 import { useTheme } from '../context/ThemeContext';
+import AIAssistant from '../components/AIAssistant';
+import FloatingAIButton from '../components/FloatingAIButton';
+import ragService from '../services/ragService';
+import userProfileService from '../services/userProfileService';
 
 export default function FriendsScreen({ navigation }) {
   const [searchText, setSearchText] = useState('');
@@ -10,6 +14,10 @@ export default function FriendsScreen({ navigation }) {
   const [pendingRequests, setPendingRequests] = useState([]);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  // AI-related state
+  const [showAIAssistant, setShowAIAssistant] = useState(false);
+  const [userProfile, setUserProfile] = useState({});
+  const [friendSuggestions, setFriendSuggestions] = useState([]);
   const { currentUser, supabase } = useAuth();
   const { currentTheme } = useTheme();
 
@@ -31,6 +39,8 @@ export default function FriendsScreen({ navigation }) {
     if (currentUser) {
       loadFriends();
       loadPendingRequests();
+      loadUserProfile();
+      generateAIFriendSuggestions();
     }
   }, [currentUser]);
 
@@ -97,6 +107,37 @@ export default function FriendsScreen({ navigation }) {
     } catch (error) {
       console.error('Error loading pending requests:', error);
     }
+  };
+
+  const loadUserProfile = async () => {
+    try {
+      const profile = await userProfileService.getMockUserProfile(currentUser.id);
+      setUserProfile(profile);
+    } catch (error) {
+      console.error('Error loading user profile:', error);
+    }
+  };
+
+  const generateAIFriendSuggestions = async () => {
+    try {
+      const profile = await userProfileService.getMockUserProfile(currentUser.id);
+      const suggestions = await ragService.generateFriendSuggestions(
+        profile, 
+        friends,
+        profile.interests || []
+      );
+      setFriendSuggestions(suggestions.connectionOpportunities || []);
+    } catch (error) {
+      console.error('Error generating AI friend suggestions:', error);
+    }
+  };
+
+  const handleAISuggestionSelect = (suggestion) => {
+    // Handle AI suggestions for friend-making
+    Alert.alert('AI Friend Tip', `"${suggestion}"\n\nThis might help you connect with new people!`, [
+      { text: 'Thanks!', style: 'cancel' },
+      { text: 'Try It', onPress: () => console.log('User wants to try suggestion:', suggestion) }
+    ]);
   };
 
   const searchUsers = async () => {
@@ -533,6 +574,32 @@ export default function FriendsScreen({ navigation }) {
           </View>
         }
         showsVerticalScrollIndicator={false}
+      />
+
+      {/* Floating AI Assistant Button */}
+      <FloatingAIButton
+        onPress={() => setShowAIAssistant(true)}
+        visible={true}
+      />
+
+      {/* AI Assistant Modal */}
+      <AIAssistant
+        visible={showAIAssistant}
+        onClose={() => setShowAIAssistant(false)}
+        context="friends"
+        onSuggestionSelect={handleAISuggestionSelect}
+        userProfile={userProfile}
+        conversationData={{
+          messages: [],
+          chatType: 'assistant',
+          relationship: 'ai_helper',
+          context: {
+            screen: 'friends',
+            friendCount: friends.length,
+            pendingRequests: pendingRequests.length,
+            suggestions: friendSuggestions
+          }
+        }}
       />
     </View>
   );

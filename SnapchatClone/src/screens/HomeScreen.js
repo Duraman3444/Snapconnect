@@ -2,10 +2,18 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, FlatList, TouchableOpacity, Image, Alert, ScrollView } from 'react-native';
 import { useAuth } from '../context/SupabaseAuthContext';
 import { useTheme } from '../context/ThemeContext';
+import AIAssistant from '../components/AIAssistant';
+import FloatingAIButton from '../components/FloatingAIButton';
+import ragService from '../services/ragService';
+import userProfileService from '../services/userProfileService';
 
 export default function HomeScreen({ navigation }) {
   const [snaps, setSnaps] = useState([]);
   const [loading, setLoading] = useState(true);
+  // AI-related state
+  const [showAIAssistant, setShowAIAssistant] = useState(false);
+  const [userProfile, setUserProfile] = useState({});
+  const [dailyRecommendations, setDailyRecommendations] = useState([]);
   const { currentUser, supabase } = useAuth();
   const { currentTheme } = useTheme();
 
@@ -13,6 +21,8 @@ export default function HomeScreen({ navigation }) {
     if (!currentUser) return;
 
     loadSnaps();
+    loadUserProfile();
+    generateDailyRecommendations();
     
     // Set up real-time subscription for new snaps
     const subscription = supabase
@@ -58,6 +68,45 @@ export default function HomeScreen({ navigation }) {
       console.error('Error loading snaps:', error);
       setLoading(false);
     }
+  };
+
+  const loadUserProfile = async () => {
+    try {
+      const profile = await userProfileService.getMockUserProfile(currentUser.id);
+      setUserProfile(profile);
+    } catch (error) {
+      console.error('Error loading user profile:', error);
+    }
+  };
+
+  const generateDailyRecommendations = async () => {
+    try {
+      const profile = await userProfileService.getMockUserProfile(currentUser.id);
+      const screenContext = {
+        screen: 'home',
+        activity: 'browsing_snaps',
+        location: 'campus'
+      };
+
+      // Generate campus event suggestions
+      const eventSuggestions = await ragService.suggestCampusEvents(
+        profile.interests || ['social', 'academic'], 
+        new Date(),
+        []
+      );
+
+      setDailyRecommendations(eventSuggestions.recommendedEvents || []);
+    } catch (error) {
+      console.error('Error generating daily recommendations:', error);
+    }
+  };
+
+  const handleAISuggestionSelect = (suggestion) => {
+    // Handle AI suggestions - could navigate or show more info
+    Alert.alert('AI Suggestion', `"${suggestion}"\n\nWould you like to explore this further?`, [
+      { text: 'Maybe Later', style: 'cancel' },
+      { text: 'Let\'s Go!', onPress: () => navigation.navigate('Camera') }
+    ]);
   };
 
   const viewSnap = async (snap) => {
@@ -535,6 +584,31 @@ export default function HomeScreen({ navigation }) {
           </TouchableOpacity>
         </View>
       </View>
+
+      {/* Floating AI Assistant Button */}
+      <FloatingAIButton
+        onPress={() => setShowAIAssistant(true)}
+        visible={true}
+      />
+
+      {/* AI Assistant Modal */}
+      <AIAssistant
+        visible={showAIAssistant}
+        onClose={() => setShowAIAssistant(false)}
+        context="home"
+        onSuggestionSelect={handleAISuggestionSelect}
+        userProfile={userProfile}
+        conversationData={{
+          messages: [],
+          chatType: 'assistant',
+          relationship: 'ai_helper',
+          context: {
+            screen: 'home',
+            hasSnaps: snaps.length > 0,
+            recommendations: dailyRecommendations
+          }
+        }}
+      />
     </View>
   );
 } 
