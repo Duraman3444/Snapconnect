@@ -53,6 +53,12 @@ import SeasonalFeaturesScreen from './src/screens/SeasonalFeaturesScreen';
 // RAG AI Features
 import RAGHomeScreen from './src/screens/RAGHomeScreen';
 
+// Tutorial Screen
+import TutorialScreen from './src/screens/TutorialScreen';
+
+// Main Screen Controller
+import MainScreenController from './src/components/MainScreenController';
+
 // Import debug components
 import DebugAccountSwitcher from './src/components/DebugAccountSwitcher';
 
@@ -91,8 +97,9 @@ function AppNavigator() {
     <NavigationContainer>
       <Stack.Navigator screenOptions={{ headerShown: false }}>
         {currentUser ? (
-          // Authenticated user screens - Camera is now the main screen
+          // Authenticated user screens - MainScreenController handles tutorial/camera logic
           <>
+            <Stack.Screen name="Main" component={MainScreenController} />
             <Stack.Screen name="Camera" component={CameraScreen} />
             <Stack.Screen name="Home" component={HomeScreen} />
             <Stack.Screen 
@@ -186,6 +193,9 @@ function AppNavigator() {
             
             {/* RAG AI Features */}
             <Stack.Screen name="RAGHome" component={RAGHomeScreen} />
+            
+            {/* Tutorial Screen */}
+            <Stack.Screen name="Tutorial" component={TutorialScreen} />
           </>
         ) : (
           // Authentication screens

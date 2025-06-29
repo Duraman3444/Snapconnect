@@ -268,6 +268,13 @@ export default function ProfileScreen({ navigation }) {
         </View>
 
         <SettingItem
+          title="Tutorial & AI Guide"
+          subtitle="Learn about AI features and app usage"
+          onPress={() => navigation.navigate('Tutorial')}
+          rightElement={<Text style={[styles.arrow, { color: currentTheme.textSecondary }]}>🤖</Text>}
+        />
+
+        <SettingItem
           title="Privacy Settings"
           subtitle="Manage your privacy"
           onPress={() => Alert.alert('Coming Soon', 'Privacy settings will be available soon!')}
