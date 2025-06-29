@@ -18,6 +18,81 @@ export default function HomeScreen({ navigation }) {
   const { currentUser, supabase } = useAuth();
   const { currentTheme } = useTheme();
 
+  // Seasonal helper functions
+  const getCurrentSeason = () => {
+    const month = new Date().getMonth();
+    if (month >= 2 && month <= 4) return 'spring';
+    else if (month >= 5 && month <= 7) return 'summer';
+    else if (month >= 8 && month <= 10) return 'fall';
+    else return 'winter';
+  };
+
+  const getCurrentSeasonTheme = () => {
+    const season = getCurrentSeason();
+    const themes = {
+      spring: { background: '#f0fdf4', primary: '#16a34a', secondary: '#15803d' },
+      summer: { background: '#fef3c7', primary: '#f59e0b', secondary: '#d97706' },
+      fall: { background: '#fed7aa', primary: '#ea580c', secondary: '#c2410c' },
+      winter: { background: '#dbeafe', primary: '#2563eb', secondary: '#1d4ed8' }
+    };
+    return themes[season];
+  };
+
+  const getCurrentSeasonEmoji = () => {
+    const season = getCurrentSeason();
+    const emojis = {
+      spring: '🌸',
+      summer: '☀️',
+      fall: '🍂',
+      winter: '❄️'
+    };
+    return emojis[season];
+  };
+
+  const getCurrentSeasonTitle = () => {
+    const season = getCurrentSeason();
+    const titles = {
+      spring: 'Spring Semester Features',
+      summer: 'Summer Session Support',
+      fall: 'Fall Semester Features',
+      winter: 'Winter Break Activities'
+    };
+    return titles[season];
+  };
+
+  const getCurrentSeasonDescription = () => {
+    const season = getCurrentSeason();
+    const descriptions = {
+      spring: 'Spring break planning, finals prep, and graduation celebrations!',
+      summer: 'Internship networking, course planning, and campus activities!',
+      fall: 'Move-in coordination, study groups, and college sports!',
+      winter: 'Winter break plans, career prep, and wellness support!'
+    };
+    return descriptions[season];
+  };
+
+  const getCurrentSeasonAction = () => {
+    const season = getCurrentSeason();
+    const actions = {
+      spring: 'Plan Spring Break',
+      summer: 'Summer Activities',
+      fall: 'Move-in Support',
+      winter: 'Winter Planning'
+    };
+    return actions[season];
+  };
+
+  const getCurrentSeasonFeatures = () => {
+    const season = getCurrentSeason();
+    const features = {
+      spring: 'Break planning • Finals support • Graduation prep',
+      summer: 'Internships • Summer classes • Campus events',
+      fall: 'Move-in help • Study groups • Sports events',
+      winter: 'Break activities • Career prep • Wellness'
+    };
+    return features[season];
+  };
+
   useEffect(() => {
     if (!currentUser) return;
 
@@ -290,6 +365,59 @@ export default function HomeScreen({ navigation }) {
             <View style={[{ backgroundColor: '#ede9fe', borderRadius: 12, padding: 12 }]}>
               <Text style={[{ color: '#6d28d9', fontSize: 12, fontWeight: 'bold', textAlign: 'center' }]}>
                 ✨ Powered by OpenAI GPT • Personalized for college life
+              </Text>
+            </View>
+          </View>
+
+          {/* Seasonal Features - Dynamic based on current season */}
+          <View style={[{ backgroundColor: getCurrentSeasonTheme().background, borderRadius: 20, padding: 20, marginBottom: 24 }]}>
+            <Text style={[{ fontSize: 18, color: getCurrentSeasonTheme().primary, fontWeight: 'bold', textAlign: 'center', marginBottom: 8 }]}>
+              {getCurrentSeasonEmoji()} {getCurrentSeasonTitle()}
+            </Text>
+            <Text style={[{ color: getCurrentSeasonTheme().secondary, fontSize: 14, textAlign: 'center', marginBottom: 16 }]}>
+              {getCurrentSeasonDescription()}
+            </Text>
+            
+            {/* Primary Seasonal Action */}
+            <TouchableOpacity
+              style={[{ backgroundColor: getCurrentSeasonTheme().primary, borderRadius: 16, padding: 16, marginBottom: 12, alignItems: 'center' }]}
+              onPress={() => navigation.navigate('SeasonalFeatures')}
+            >
+              <Text style={[{ fontSize: 24, marginBottom: 4 }]}>{getCurrentSeasonEmoji()}</Text>
+              <Text style={[{ color: 'white', fontWeight: 'bold', fontSize: 16, marginBottom: 4 }]}>
+                {getCurrentSeasonAction()}
+              </Text>
+              <Text style={[{ color: 'rgba(255,255,255,0.9)', fontSize: 12, textAlign: 'center' }]}>
+                {getCurrentSeasonFeatures()}
+              </Text>
+            </TouchableOpacity>
+
+            {/* Secondary Seasonal Features */}
+            <View style={[{ flexDirection: 'row', gap: 8 }]}>
+              <TouchableOpacity
+                style={[{ backgroundColor: 'white', borderRadius: 12, padding: 12, flex: 1, alignItems: 'center', borderWidth: 1, borderColor: getCurrentSeasonTheme().primary }]}
+                onPress={() => navigation.navigate('Gamification')}
+              >
+                <Text style={[{ fontSize: 18, marginBottom: 4 }]}>🎮</Text>
+                <Text style={[{ color: getCurrentSeasonTheme().primary, fontWeight: '600', fontSize: 12, textAlign: 'center' }]}>
+                  Study Streaks
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[{ backgroundColor: 'white', borderRadius: 12, padding: 12, flex: 1, alignItems: 'center', borderWidth: 1, borderColor: getCurrentSeasonTheme().primary }]}
+                onPress={() => navigation.navigate('Gamification')}
+              >
+                <Text style={[{ fontSize: 18, marginBottom: 4 }]}>🏆</Text>
+                <Text style={[{ color: getCurrentSeasonTheme().primary, fontWeight: '600', fontSize: 12, textAlign: 'center' }]}>
+                  Achievements
+                </Text>
+              </TouchableOpacity>
+            </View>
+            
+            {/* AI Seasonal Recommendations */}
+            <View style={[{ backgroundColor: 'rgba(255,255,255,0.9)', borderRadius: 12, padding: 12, marginTop: 12 }]}>
+              <Text style={[{ color: getCurrentSeasonTheme().primary, fontSize: 12, fontWeight: 'bold', textAlign: 'center' }]}>
+                🧠 AI-Powered {getCurrentSeasonTitle()} Tips
               </Text>
             </View>
           </View>

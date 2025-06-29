@@ -2,11 +2,21 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, Alert } from 'react-native';
 import { useAuth } from '../context/SupabaseAuthContext';
 import { useTheme } from '../context/ThemeContext';
+import AIAssistant from '../components/AIAssistant';
+import FloatingAIButton from '../components/FloatingAIButton';
+import ragService from '../services/ragService';
+import userProfileService from '../services/userProfileService';
 
 export default function SeasonalFeaturesScreen({ navigation }) {
   const [activeTab, setActiveTab] = useState('movein');
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [currentSeason, setCurrentSeason] = useState('fall');
+  // AI integration state - only load when requested
+  const [showAIAssistant, setShowAIAssistant] = useState(false);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiSuggestions, setAiSuggestions] = useState({});
+  const [expandedAI, setExpandedAI] = useState(null);
+  const [userProfile, setUserProfile] = useState({});
   const { currentUser, supabase } = useAuth();
   const { currentTheme } = useTheme();
 
@@ -18,8 +28,212 @@ export default function SeasonalFeaturesScreen({ navigation }) {
     else if (month >= 8 && month <= 10) setCurrentSeason('fall');
     else setCurrentSeason('winter');
     
-    setLoading(false);
+    // Load user profile without AI recommendations
+    loadUserProfile();
   }, []);
+
+  const loadUserProfile = async () => {
+    try {
+      setLoading(true);
+      if (currentUser) {
+        const profile = await userProfileService.getMockUserProfile(currentUser.id);
+        setUserProfile(profile);
+      }
+    } catch (error) {
+      console.error('Error loading profile:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Only generate AI suggestions when user specifically requests them
+  const getContextualAISuggestions = async (featureType) => {
+    try {
+      setAiLoading(true);
+      setExpandedAI(featureType);
+      
+      const result = await ragService.generateSeasonalRecommendations(
+        currentSeason,
+        featureType,
+        userProfile,
+        { 
+          location: 'campus',
+          stressLevel: 'moderate',
+          socialLevel: 'active',
+          budget: 'student' 
+        }
+      );
+      
+      if (result && result.recommendations) {
+        const rec = result.recommendations;
+        const suggestionData = {
+          insight: rec.seasonalInsight || `Great time to focus on ${featureType} activities!`,
+          immediateActions: rec.immediateActions || [],
+          weeklyPlanning: rec.weeklyPlanning || [],
+          personalizedTips: rec.personalizedTips || [],
+          budgetFriendly: rec.budgetFriendly || [],
+          socialIntegration: rec.socialIntegration || [],
+          campusResources: rec.campusResources || []
+        };
+        
+        setAiSuggestions(prev => ({
+          ...prev,
+          [featureType]: suggestionData
+        }));
+      }
+    } catch (error) {
+      console.error('Error getting AI suggestions:', error);
+      // Set fallback suggestions
+      setAiSuggestions(prev => ({
+        ...prev,
+        [featureType]: {
+          insight: `Here are some quick tips for ${featureType}:`,
+          fallbackTips: getQuickTips(featureType).split('\n')
+        }
+      }));
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
+  const getQuickTips = (featureType) => {
+    const tips = {
+      movein: '🏠 Pack essentials first\n📱 Download campus apps\n🤝 Connect with roommates\n📦 Label everything clearly',
+      spring: '🏖️ Plan with friends early\n💰 Set a realistic budget\n📱 Share location with family\n☀️ Research weather conditions',
+      finals: '📚 Create study schedule\n👥 Form study groups\n🧘 Take stress breaks\n💡 Use active recall methods',
+      graduation: '🎓 Order cap and gown early\n📸 Plan photo sessions\n👨‍👩‍👧‍👦 Coordinate with family\n🎉 Celebrate achievements',
+      sports: '🏈 Check game schedules\n🎪 Join tailgate parties\n👕 Get team gear\n📱 Follow team updates'
+    };
+    return tips[featureType] || 'Great seasonal activity to focus on!';
+  };
+
+  const renderAISuggestions = (featureType) => {
+    const suggestions = aiSuggestions[featureType];
+    if (!suggestions || expandedAI !== featureType) return null;
+
+    return (
+      <View style={{ marginBottom: 20 }}>
+        <View style={[{ 
+          backgroundColor: '#f0f9ff', 
+          borderRadius: 12, 
+          padding: 16, 
+          borderWidth: 1, 
+          borderColor: '#0ea5e9',
+          marginTop: 12
+        }]}>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+            <Text style={[{ fontSize: 16, fontWeight: 'bold', color: '#0c4a6e' }]}>
+              🤖 AI Suggestions
+            </Text>
+            <TouchableOpacity
+              onPress={() => setExpandedAI(null)}
+              style={{ padding: 4 }}
+            >
+              <Text style={[{ fontSize: 18, color: '#0c4a6e' }]}>✕</Text>
+            </TouchableOpacity>
+          </View>
+          
+          {suggestions.insight && (
+            <View style={{ marginBottom: 16 }}>
+              <Text style={[{ fontSize: 14, color: '#0c4a6e', fontStyle: 'italic', lineHeight: 20 }]}>
+                {suggestions.insight}
+              </Text>
+            </View>
+          )}
+
+          {suggestions.fallbackTips ? (
+            <View>
+              {suggestions.fallbackTips.map((tip, index) => (
+                <Text key={index} style={[{ fontSize: 14, color: '#0c4a6e', marginBottom: 8, lineHeight: 20 }]}>
+                  {tip}
+                </Text>
+              ))}
+            </View>
+          ) : (
+            <View>
+              {suggestions.immediateActions?.length > 0 && (
+                <View style={{ marginBottom: 12 }}>
+                  <Text style={[{ fontSize: 14, fontWeight: 'bold', color: '#0c4a6e', marginBottom: 6 }]}>
+                    🎯 Immediate Actions:
+                  </Text>
+                  {suggestions.immediateActions.slice(0, 3).map((action, index) => (
+                    <Text key={index} style={[{ fontSize: 13, color: '#0c4a6e', marginBottom: 4, marginLeft: 12 }]}>
+                      • {action}
+                    </Text>
+                  ))}
+                </View>
+              )}
+
+              {suggestions.weeklyPlanning?.length > 0 && (
+                <View style={{ marginBottom: 12 }}>
+                  <Text style={[{ fontSize: 14, fontWeight: 'bold', color: '#0c4a6e', marginBottom: 6 }]}>
+                    📅 This Week:
+                  </Text>
+                  {suggestions.weeklyPlanning.slice(0, 2).map((plan, index) => (
+                    <Text key={index} style={[{ fontSize: 13, color: '#0c4a6e', marginBottom: 4, marginLeft: 12 }]}>
+                      • {plan}
+                    </Text>
+                  ))}
+                </View>
+              )}
+
+              {suggestions.personalizedTips?.length > 0 && (
+                <View style={{ marginBottom: 12 }}>
+                  <Text style={[{ fontSize: 14, fontWeight: 'bold', color: '#0c4a6e', marginBottom: 6 }]}>
+                    💡 Personalized Tips:
+                  </Text>
+                  {suggestions.personalizedTips.slice(0, 2).map((tip, index) => (
+                    <Text key={index} style={[{ fontSize: 13, color: '#0c4a6e', marginBottom: 4, marginLeft: 12 }]}>
+                      • {tip}
+                    </Text>
+                  ))}
+                </View>
+              )}
+
+              {suggestions.budgetFriendly?.length > 0 && (
+                <View style={{ marginBottom: 12 }}>
+                  <Text style={[{ fontSize: 14, fontWeight: 'bold', color: '#0c4a6e', marginBottom: 6 }]}>
+                    💰 Budget-Friendly Options:
+                  </Text>
+                  {suggestions.budgetFriendly.slice(0, 2).map((option, index) => (
+                    <Text key={index} style={[{ fontSize: 13, color: '#0c4a6e', marginBottom: 4, marginLeft: 12 }]}>
+                      • {option}
+                    </Text>
+                  ))}
+                </View>
+              )}
+
+              {suggestions.socialIntegration?.length > 0 && (
+                <View style={{ marginBottom: 12 }}>
+                  <Text style={[{ fontSize: 14, fontWeight: 'bold', color: '#0c4a6e', marginBottom: 6 }]}>
+                    👥 Social Ideas:
+                  </Text>
+                  {suggestions.socialIntegration.slice(0, 2).map((idea, index) => (
+                    <Text key={index} style={[{ fontSize: 13, color: '#0c4a6e', marginBottom: 4, marginLeft: 12 }]}>
+                      • {idea}
+                    </Text>
+                  ))}
+                </View>
+              )}
+
+              {suggestions.campusResources?.length > 0 && (
+                <View>
+                  <Text style={[{ fontSize: 14, fontWeight: 'bold', color: '#0c4a6e', marginBottom: 6 }]}>
+                    🏫 Campus Resources:
+                  </Text>
+                  {suggestions.campusResources.slice(0, 2).map((resource, index) => (
+                    <Text key={index} style={[{ fontSize: 13, color: '#0c4a6e', marginBottom: 4, marginLeft: 12 }]}>
+                      • {resource}
+                    </Text>
+                  ))}
+                </View>
+              )}
+            </View>
+          )}
+        </View>
+      </View>
+    );
+  };
 
   const renderMoveInCoordination = () => (
     <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
@@ -79,6 +293,35 @@ export default function SeasonalFeaturesScreen({ navigation }) {
             </View>
           ))}
         </View>
+
+        {/* AI-Powered Move-in Tips - On-Demand Only */}
+        <View style={{ marginBottom: 20 }}>
+          <Text style={[{ fontSize: 16, fontWeight: 'bold', color: currentTheme.primary, marginBottom: 12 }]}>
+            🧠 AI Move-in Assistant
+          </Text>
+          <View style={[{ backgroundColor: '#f0f9ff', borderRadius: 12, padding: 16, borderWidth: 1, borderColor: '#0ea5e9' }]}>
+            <Text style={[{ fontSize: 14, color: '#0c4a6e', lineHeight: 20, marginBottom: 12 }]}>
+              Get personalized suggestions for what to bring, packing tips, and move-in day essentials based on your dorm and preferences!
+            </Text>
+            <TouchableOpacity
+              style={[{ 
+                backgroundColor: aiLoading ? '#94a3b8' : '#0ea5e9', 
+                borderRadius: 8, 
+                padding: 12, 
+                alignItems: 'center' 
+              }]}
+              onPress={() => getContextualAISuggestions('movein')}
+              disabled={aiLoading}
+            >
+              <Text style={[{ color: 'white', fontWeight: 'bold', fontSize: 14 }]}>
+                {aiLoading ? '🤖 Getting Tips...' : '🤖 Get AI Move-in Tips'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* Render AI suggestions inline */}
+        {renderAISuggestions('movein')}
       </View>
     </ScrollView>
   );
@@ -132,6 +375,35 @@ export default function SeasonalFeaturesScreen({ navigation }) {
             </View>
           ))}
         </View>
+
+        {/* AI Spring Break Suggestions */}
+        <View style={{ marginBottom: 20 }}>
+          <Text style={[{ fontSize: 16, fontWeight: 'bold', color: currentTheme.primary, marginBottom: 12 }]}>
+            🌺 AI Spring Break Planner
+          </Text>
+          <View style={[{ backgroundColor: '#f0fdf4', borderRadius: 12, padding: 16, borderWidth: 1, borderColor: '#22c55e' }]}>
+            <Text style={[{ fontSize: 14, color: '#166534', lineHeight: 20, marginBottom: 12 }]}>
+              Get personalized spring break ideas based on current trends, your budget, and what's popular this time of year!
+            </Text>
+            <TouchableOpacity
+              style={[{ 
+                backgroundColor: aiLoading ? '#94a3b8' : '#22c55e', 
+                borderRadius: 8, 
+                padding: 12, 
+                alignItems: 'center' 
+              }]}
+              onPress={() => getContextualAISuggestions('spring')}
+              disabled={aiLoading}
+            >
+              <Text style={[{ color: 'white', fontWeight: 'bold', fontSize: 14 }]}>
+                {aiLoading ? '🌴 Getting Ideas...' : '🌴 Get Spring Break Ideas'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* Render AI suggestions inline */}
+        {renderAISuggestions('spring')}
       </View>
     </ScrollView>
   );
@@ -193,6 +465,35 @@ export default function SeasonalFeaturesScreen({ navigation }) {
             </View>
           ))}
         </View>
+
+        {/* AI Finals Study Assistant */}
+        <View style={{ marginBottom: 20 }}>
+          <Text style={[{ fontSize: 16, fontWeight: 'bold', color: currentTheme.primary, marginBottom: 12 }]}>
+            📖 AI Study Assistant
+          </Text>
+          <View style={[{ backgroundColor: '#fef3c7', borderRadius: 12, padding: 16, borderWidth: 1, borderColor: '#f59e0b' }]}>
+            <Text style={[{ fontSize: 14, color: '#92400e', lineHeight: 20, marginBottom: 12 }]}>
+              Get personalized study strategies, time management tips, and stress-relief techniques tailored to your subjects and study style!
+            </Text>
+            <TouchableOpacity
+              style={[{ 
+                backgroundColor: aiLoading ? '#94a3b8' : '#f59e0b', 
+                borderRadius: 8, 
+                padding: 12, 
+                alignItems: 'center' 
+              }]}
+              onPress={() => getContextualAISuggestions('finals')}
+              disabled={aiLoading}
+            >
+              <Text style={[{ color: 'white', fontWeight: 'bold', fontSize: 14 }]}>
+                {aiLoading ? '📚 Getting Study Tips...' : '📚 Get Study Strategy'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* Render AI suggestions inline */}
+        {renderAISuggestions('finals')}
       </View>
     </ScrollView>
   );
@@ -240,6 +541,35 @@ export default function SeasonalFeaturesScreen({ navigation }) {
             </TouchableOpacity>
           </View>
         </View>
+
+        {/* AI Graduation Planning Assistant */}
+        <View style={{ marginBottom: 20 }}>
+          <Text style={[{ fontSize: 16, fontWeight: 'bold', color: currentTheme.primary, marginBottom: 12 }]}>
+            🎉 AI Graduation Planner
+          </Text>
+          <View style={[{ backgroundColor: '#f3e8ff', borderRadius: 12, padding: 16, borderWidth: 1, borderColor: '#8b5cf6' }]}>
+            <Text style={[{ fontSize: 14, color: '#5b21b6', lineHeight: 20, marginBottom: 12 }]}>
+              Get personalized graduation preparation tips, celebration ideas, and next-step guidance to make the most of this milestone!
+            </Text>
+            <TouchableOpacity
+              style={[{ 
+                backgroundColor: aiLoading ? '#94a3b8' : '#8b5cf6', 
+                borderRadius: 8, 
+                padding: 12, 
+                alignItems: 'center' 
+              }]}
+              onPress={() => getContextualAISuggestions('graduation')}
+              disabled={aiLoading}
+            >
+              <Text style={[{ color: 'white', fontWeight: 'bold', fontSize: 14 }]}>
+                {aiLoading ? '🎓 Getting Ideas...' : '🎓 Get Graduation Ideas'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* Render AI suggestions inline */}
+        {renderAISuggestions('graduation')}
       </View>
     </ScrollView>
   );
@@ -284,6 +614,35 @@ export default function SeasonalFeaturesScreen({ navigation }) {
             🎪 Organize Tailgate Party
           </Text>
         </TouchableOpacity>
+
+        {/* AI Sports Experience Assistant */}
+        <View style={{ marginBottom: 20 }}>
+          <Text style={[{ fontSize: 16, fontWeight: 'bold', color: currentTheme.primary, marginBottom: 12 }]}>
+            🏆 AI Sports Companion
+          </Text>
+          <View style={[{ backgroundColor: '#fef2f2', borderRadius: 12, padding: 16, borderWidth: 1, borderColor: '#ef4444' }]}>
+            <Text style={[{ fontSize: 14, color: '#991b1b', lineHeight: 20, marginBottom: 12 }]}>
+              Get personalized game day tips, tailgate ideas, team traditions, and ways to maximize your college sports experience!
+            </Text>
+            <TouchableOpacity
+              style={[{ 
+                backgroundColor: aiLoading ? '#94a3b8' : '#ef4444', 
+                borderRadius: 8, 
+                padding: 12, 
+                alignItems: 'center' 
+              }]}
+              onPress={() => getContextualAISuggestions('sports')}
+              disabled={aiLoading}
+            >
+              <Text style={[{ color: 'white', fontWeight: 'bold', fontSize: 14 }]}>
+                {aiLoading ? '🏈 Getting Tips...' : '🏈 Get Game Day Tips'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* Render AI suggestions inline */}
+        {renderAISuggestions('sports')}
       </View>
     </ScrollView>
   );
@@ -344,7 +703,10 @@ export default function SeasonalFeaturesScreen({ navigation }) {
                   borderWidth: 1,
                   borderColor: activeTab === tab.key ? currentTheme.primary : currentTheme.border
                 }]}
-                onPress={() => setActiveTab(tab.key)}
+                onPress={() => {
+                  setActiveTab(tab.key);
+                  setExpandedAI(null); // Clear any expanded AI suggestions when switching tabs
+                }}
               >
                 <Text style={[{
                   color: activeTab === tab.key ? currentTheme.background : currentTheme.primary,
@@ -369,6 +731,32 @@ export default function SeasonalFeaturesScreen({ navigation }) {
       ) : (
         renderTabContent()
       )}
+      
+      {/* Floating AI Assistant Button */}
+      <FloatingAIButton
+        onPress={() => setShowAIAssistant(true)}
+        visible={true}
+      />
+
+      {/* AI Assistant Modal */}
+      <AIAssistant
+        visible={showAIAssistant}
+        onClose={() => setShowAIAssistant(false)}
+        context="seasonal_features"
+        onSuggestionSelect={(suggestion) => Alert.alert('AI Suggestion', suggestion)}
+        userProfile={userProfile}
+        conversationData={{
+          messages: [],
+          chatType: 'assistant',
+          relationship: 'ai_helper',
+          context: {
+            screen: 'seasonal_features',
+            currentTab: activeTab,
+            season: currentSeason,
+            recommendations: aiSuggestions
+          }
+        }}
+      />
     </View>
   );
 } 

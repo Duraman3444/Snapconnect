@@ -124,13 +124,15 @@ export default function FriendsScreen({ navigation }) {
           conversation_id,
           conversations:conversation_id (
             id,
-            name,
-            description,
+            group_name,
+            group_description,
             created_at,
-            created_by
+            created_by,
+            is_group
           )
         `)
-        .eq('user_id', currentUser.id);
+        .eq('user_id', currentUser.id)
+        .eq('is_active', true);
 
       if (participantsError) {
         console.error('Error loading group participants:', participantsError);

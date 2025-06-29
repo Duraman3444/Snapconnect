@@ -617,38 +617,32 @@ Return as JSON:
     }
   }
 
-  // 12. AI-Enhanced Party Safety & Social Planning
+  // 12. Generate safety recommendations for events and campus activities
   async generateSafetyRecommendations(eventContext, userProfile) {
     try {
       const prompt = `
-You are an AI safety advisor helping college students plan safe social activities.
+You are a campus safety advisor helping students stay safe during college activities.
 
 Event Context:
-- Type: ${eventContext.type || 'social gathering'}
-- Size: ${eventContext.size || 'medium'}
+- Type: ${eventContext.eventType || 'campus activity'}
 - Location: ${eventContext.location || 'campus'}
 - Time: ${eventContext.time || 'evening'}
+- Group Size: ${eventContext.groupSize || 'small group'}
 
 Student Profile:
-- Experience Level: ${userProfile.socialExperience || 'moderate'}
-- Friend Group Size: ${userProfile.friendGroupSize || 'small'}
+- Experience Level: ${userProfile.campusExperience || 'new to campus'}
+- Transportation: ${userProfile.transportation || 'walking'}
 
-Generate safety recommendations and social tips:
+Generate comprehensive safety recommendations:
 
 Return as JSON:
 {
-  "safetyTips": ["tip1", "tip2", "tip3"],
-  "buddySystem": {
-    "strategy": "how to use buddy system",
-    "checkIns": "when to check in",
-    "signals": "emergency signals"
-  },
-  "socialTips": ["social1", "social2"],
-  "emergencyPlan": {
-    "contacts": "who to contact",
-    "extraction": "how to leave safely",
-    "resources": "campus resources"
-  }
+  "beforeEvent": ["safety tip 1", "safety tip 2"],
+  "duringEvent": ["safety tip 1", "safety tip 2"],
+  "transportation": ["transport safety tip 1", "transport safety tip 2"],
+  "emergencyContacts": ["Campus Security: (555) 123-4567", "Local Emergency: 911"],
+  "riskAssessment": "low/medium/high",
+  "specificPrecautions": ["precaution 1", "precaution 2"]
 }`;
 
       const response = await this.callOpenAI(prompt);
@@ -661,7 +655,154 @@ Return as JSON:
     }
   }
 
-  // 13. Smart Message Suggestions for Chat - Enhanced with conversation-first context awareness
+  // 13. Generate intelligent seasonal feature recommendations - NEW
+  async generateSeasonalRecommendations(season, featureType, userProfile = {}, userContext = {}) {
+    try {
+      const currentTime = new Date();
+      const timeOfDay = this.getTimeOfDay(currentTime);
+      const dayOfWeek = currentTime.toLocaleDateString('en-US', { weekday: 'long' });
+      
+      const prompt = `
+You are an advanced college life AI assistant providing highly personalized seasonal recommendations.
+
+=== SEASONAL CONTEXT ===
+Current Season: ${season}
+Feature Type: ${featureType}
+Time: ${timeOfDay} (${dayOfWeek})
+Academic Calendar Phase: ${this.getAcademicPhase(currentTime)}
+
+=== USER PROFILE ===
+Major: ${userProfile.major || 'General Studies'}
+Year: ${userProfile.year || 'Sophomore'}
+Interests: ${(userProfile.interests || []).join(', ') || 'General college activities'}
+Past Seasonal Activities: ${(userProfile.seasonalHistory || []).join(', ') || 'None recorded'}
+Campus Involvement: ${userProfile.involvement || 'Moderate'}
+
+=== CURRENT CONTEXT ===
+Location: ${userContext.location || 'On campus'}
+Stress Level: ${userContext.stressLevel || 'Moderate'}
+Social Activity: ${userContext.socialLevel || 'Regular'}
+Budget Considerations: ${userContext.budget || 'Student budget'}
+
+=== FEATURE-SPECIFIC RECOMMENDATIONS ===
+Based on the season "${season}" and feature "${featureType}", provide:
+
+1. **Immediate Actions** (2-3 specific steps they can take today)
+2. **Weekly Planning** (activities for this week)
+3. **Long-term Strategy** (planning for the next month)
+4. **Personalized Tips** (based on their major and interests)
+5. **Social Integration** (how to involve friends/make connections)
+6. **Budget-Friendly Options** (cost-effective alternatives)
+7. **Campus Resources** (specific college services to utilize)
+8. **Success Metrics** (how to know they're making the most of this feature)
+
+Make recommendations specific to college life, considering:
+- Academic workload during this season
+- Campus events and activities
+- Social dynamics of college students
+- Financial constraints typical of students
+- Time management challenges
+- Personal growth opportunities
+
+Return as JSON:
+{
+  "immediateActions": ["action1", "action2", "action3"],
+  "weeklyPlanning": ["weekly activity 1", "weekly activity 2"],
+  "longTermStrategy": "comprehensive monthly strategy",
+  "personalizedTips": ["tip based on major/interests", "another personalized tip"],
+  "socialIntegration": ["social suggestion 1", "social suggestion 2"],
+  "budgetFriendly": ["budget option 1", "budget option 2"],
+  "campusResources": ["campus resource 1", "campus resource 2"],
+  "successMetrics": ["metric 1", "metric 2"],
+  "seasonalInsight": "why this is the perfect time for this activity",
+  "nextSteps": "what to do after implementing these recommendations"
+}`;
+
+      const response = await this.callOpenAI(prompt);
+      const result = this.parseJSONResponse(response);
+      
+      return {
+        recommendations: result,
+        season,
+        featureType,
+        generatedAt: Date.now(),
+        personalizedFor: userProfile.major || 'College Student',
+        timeContext: `${timeOfDay} on ${dayOfWeek}`,
+        academicPhase: this.getAcademicPhase(currentTime)
+      };
+    } catch (error) {
+      console.error('Error generating seasonal recommendations:', error);
+      
+      // Fallback seasonal recommendations
+      return {
+        recommendations: this.getSeasonalFallbackRecommendations(season, featureType),
+        season,
+        featureType,
+        generatedAt: Date.now(),
+        fallbackUsed: true,
+        timeContext: `${timeOfDay} on ${dayOfWeek}`
+      };
+    }
+  }
+
+  // Helper: Determine academic calendar phase
+  getAcademicPhase(date = new Date()) {
+    const month = date.getMonth();
+    const day = date.getDate();
+    
+    if (month >= 8 && month <= 11) return 'Fall Semester';
+    if (month === 11 && day > 15) return 'Finals Week';
+    if (month === 0) return 'Winter Break';
+    if (month >= 1 && month <= 4) return 'Spring Semester';
+    if (month === 4 && day > 15) return 'Finals Week';
+    if (month >= 5 && month <= 7) return 'Summer Session';
+    return 'Academic Break';
+  }
+
+  // Helper: Fallback seasonal recommendations when AI is unavailable
+  getSeasonalFallbackRecommendations(season, featureType) {
+    const fallbacks = {
+      fall: {
+        movein: {
+          immediateActions: ["Confirm your move-in time slot", "Pack essentials in a separate bag", "Download your university app"],
+          weeklyPlanning: ["Meet your roommate", "Explore dining options", "Join orientation activities"],
+          longTermStrategy: "Focus on building relationships and establishing routines during your first month",
+          personalizedTips: ["Make your dorm room feel like home", "Join clubs related to your major"],
+          seasonalInsight: "Fall move-in is the perfect time to start fresh and build your college network"
+        },
+        sports: {
+          immediateActions: ["Check the upcoming game schedule", "Connect with fellow fans", "Learn team traditions"],
+          weeklyPlanning: ["Attend a tailgate party", "Watch games with friends", "Join student sections"],
+          longTermStrategy: "Build school spirit and social connections through sports engagement",
+          personalizedTips: ["Sports are a great way to connect with alumni", "Learn school chants and traditions"],
+          seasonalInsight: "Fall sports season creates the strongest sense of campus community"
+        }
+      },
+      spring: {
+        spring: {
+          immediateActions: ["Research destinations with friends", "Set a realistic budget", "Check passport validity"],
+          weeklyPlanning: ["Plan group discussions", "Research travel deals", "Coordinate schedules"],
+          longTermStrategy: "Plan a memorable but safe spring break experience that fits your budget",
+          personalizedTips: ["Consider alternative spring breaks", "Plan activities that align with your interests"],
+          seasonalInsight: "Spring break is the perfect time to recharge before final push to summer"
+        },
+        finals: {
+          immediateActions: ["Create a study schedule", "Find your exam locations", "Form study groups"],
+          weeklyPlanning: ["Focus on high-priority subjects", "Schedule breaks and self-care", "Review past materials"],
+          longTermStrategy: "Manage stress while maximizing academic performance during finals",
+          personalizedTips: ["Use active recall study methods", "Take care of your physical and mental health"],
+          seasonalInsight: "Spring finals determine your academic year success - strategic preparation is key"
+        }
+      }
+    };
+    
+    return fallbacks[season]?.[featureType] || {
+      immediateActions: ["Take the first step", "Connect with others", "Plan ahead"],
+      seasonalInsight: `${season} is a great time to focus on ${featureType} activities`
+    };
+  }
+
+  // 14. Smart Message Suggestions for Chat - Enhanced with conversation-first context awareness
   async generateMessageSuggestions(conversationContext, userProfile = {}, screenContext = {}) {
     try {
       const currentTime = new Date();
@@ -771,324 +912,6 @@ Return as JSON:
         context: conversationContext.context,
         timeContext: `${this.getTimeOfDay()} on ${new Date().toLocaleDateString('en-US', { weekday: 'long' })}`,
         timestamp: Date.now()
-      };
-    }
-  }
-
-  // Analyze conversation context to understand what's being discussed
-  analyzeConversationContext(messages) {
-    if (!messages || messages.length === 0) {
-      return {
-        topics: ['general conversation'],
-        energy: 'neutral',
-        lastTone: 'friendly',
-        responseType: 'casual_response',
-        keyPoints: ['starting conversation'],
-        mainFocus: 'getting to know each other'
-      };
-    }
-
-    const recentMessages = messages.slice(-5);
-    const lastMessage = messages[messages.length - 1] || '';
-    
-    // Analyze topics and themes
-    const topics = this.extractTopics(recentMessages);
-    const energy = this.analyzeEnergy(recentMessages);
-    const lastTone = this.analyzeTone(lastMessage);
-    const responseType = this.determineResponseType(lastMessage);
-    const keyPoints = this.extractKeyPoints(recentMessages);
-    
-    return {
-      topics,
-      energy,
-      lastTone,
-      responseType,
-      keyPoints,
-      mainFocus: topics[0] || 'general conversation',
-      lastMessage: lastMessage.substring(0, 100) // First 100 chars for context
-    };
-  }
-
-  // Extract main topics from conversation
-  extractTopics(messages) {
-    const topicKeywords = {
-      'classes': ['class', 'course', 'professor', 'homework', 'assignment', 'exam', 'test', 'study', 'lecture'],
-      'social': ['party', 'hang out', 'friends', 'fun', 'weekend', 'plans', 'meet up', 'together'],
-      'feelings': ['feel', 'sad', 'happy', 'excited', 'stressed', 'worried', 'love', 'hate', 'awesome'],
-      'food': ['eat', 'food', 'hungry', 'dinner', 'lunch', 'restaurant', 'cooking', 'meal'],
-      'work': ['work', 'job', 'busy', 'tired', 'project', 'deadline', 'meeting', 'boss'],
-      'relationships': ['dating', 'crush', 'boyfriend', 'girlfriend', 'like', 'love', 'relationship'],
-      'events': ['event', 'concert', 'movie', 'show', 'game', 'sport', 'match', 'competition'],
-      'campus': ['campus', 'dorm', 'college', 'university', 'student', 'library', 'cafeteria']
-    };
-
-    const messageText = messages.join(' ').toLowerCase();
-    const foundTopics = [];
-
-    for (const [topic, keywords] of Object.entries(topicKeywords)) {
-      const matches = keywords.filter(keyword => messageText.includes(keyword));
-      if (matches.length > 0) {
-        foundTopics.push(topic);
-      }
-    }
-
-    return foundTopics.length > 0 ? foundTopics : ['general conversation'];
-  }
-
-  // Analyze conversation energy level
-  analyzeEnergy(messages) {
-    const messageText = messages.join(' ').toLowerCase();
-    
-    const highEnergyWords = ['excited', 'awesome', 'amazing', 'love', 'party', 'fun', '!', 'haha', 'lol'];
-    const lowEnergyWords = ['tired', 'stressed', 'sad', 'boring', 'meh', 'whatever', 'ok', 'fine'];
-    
-    const highEnergyCount = highEnergyWords.filter(word => messageText.includes(word)).length;
-    const lowEnergyCount = lowEnergyWords.filter(word => messageText.includes(word)).length;
-    
-    if (highEnergyCount > lowEnergyCount && highEnergyCount > 0) return 'high';
-    if (lowEnergyCount > highEnergyCount && lowEnergyCount > 0) return 'low';
-    return 'medium';
-  }
-
-  // Analyze tone of last message
-  analyzeTone(message) {
-    if (!message) return 'neutral';
-    
-    const msg = message.toLowerCase();
-    
-    if (msg.includes('?')) return 'questioning';
-    if (msg.includes('!') || msg.includes('haha') || msg.includes('lol')) return 'excited';
-    if (msg.includes('sad') || msg.includes('tired') || msg.includes('stressed')) return 'concerned';
-    if (msg.includes('love') || msg.includes('awesome') || msg.includes('great')) return 'positive';
-    if (msg.includes('ok') || msg.includes('sure') || msg.includes('whatever')) return 'casual';
-    
-    return 'friendly';
-  }
-
-  // Determine what type of response is needed
-  determineResponseType(message) {
-    if (!message) return 'conversation_starter';
-    
-    const msg = message.toLowerCase();
-    
-    if (msg.includes('?')) return 'answer_question';
-    if (msg.includes('what do you think') || msg.includes('opinion')) return 'give_opinion';
-    if (msg.includes('plan') || msg.includes('want to') || msg.includes('should we')) return 'make_plans';
-    if (msg.includes('sad') || msg.includes('stressed') || msg.includes('worried')) return 'show_support';
-    if (msg.includes('excited') || msg.includes('awesome') || msg.includes('great news')) return 'show_enthusiasm';
-    
-    return 'continue_conversation';
-  }
-
-  // Extract key discussion points
-  extractKeyPoints(messages) {
-    const points = [];
-    messages.forEach(msg => {
-      // Look for specific mentions that could be key points
-      if (msg.includes('going to') || msg.includes('planning')) points.push('future plans');
-      if (msg.includes('happened') || msg.includes('today') || msg.includes('yesterday')) points.push('recent events');
-      if (msg.includes('feeling') || msg.includes('think')) points.push('personal thoughts');
-      if (msg.includes('we should') || msg.includes('want to')) points.push('suggestions');
-    });
-    
-    return points.length > 0 ? [...new Set(points)] : ['general chat'];
-  }
-
-  // Context-aware fallback suggestions
-  getContextualFallback(conversationAnalysis, mood, type) {
-    const topic = conversationAnalysis.topics[0] || 'general';
-    const energy = conversationAnalysis.energy;
-    const responseType = conversationAnalysis.responseType;
-    
-    const contextualResponses = {
-      classes: {
-        direct: energy === 'low' ? "Ugh that sounds rough 😤" : "Oh nice! How's that going? 😊",
-        followup: "What's your favorite class this semester?",
-        share: "I'm dealing with similar stuff in my classes too!",
-        deeper: "How are you feeling about your workload overall?",
-        transition: "Speaking of classes, did you see what happened in..."
-      },
-      social: {
-        direct: energy === 'high' ? "That sounds awesome! 🎉" : "Yeah, good to hang out 😊",
-        followup: "Who else is going?",
-        share: "I love doing stuff like that too!",
-        deeper: "What's your ideal way to spend a weekend?",
-        transition: "That reminds me, have you heard about..."
-      },
-      feelings: {
-        direct: conversationAnalysis.lastTone === 'concerned' ? "I'm here for you 🤗" : "That's great to hear! 😊",
-        followup: "How long have you been feeling this way?",
-        share: "I totally get that feeling",
-        deeper: "What's been helping you through this?",
-        transition: "Speaking of feelings, how have you been lately overall?"
-      },
-      general: {
-        direct: this.getMoodFallback(mood, 'casual'),
-        followup: "Tell me more about that!",
-        share: "I can relate to that",
-        deeper: "How do you feel about all this?",
-        transition: "That's interesting, it makes me think of..."
-      }
-    };
-    
-    return contextualResponses[topic]?.[type] || contextualResponses.general[type];
-  }
-
-  // Generate contextual fallbacks when AI is unavailable
-  generateContextualFallbacks(conversationAnalysis, mood) {
-    const suggestions = [
-      this.getContextualFallback(conversationAnalysis, mood, 'direct'),
-      this.getContextualFallback(conversationAnalysis, mood, 'followup'),
-      this.getContextualFallback(conversationAnalysis, mood, 'share'),
-      this.getContextualFallback(conversationAnalysis, mood, 'deeper'),
-      this.getContextualFallback(conversationAnalysis, mood, 'transition')
-    ];
-    
-    return suggestions;
-  }
-
-  // Mood-specific fallback suggestions (kept for general fallbacks)
-  getMoodFallback(mood, type) {
-    const fallbacks = {
-      friendly: {
-        casual: "That's awesome! 😊",
-        thoughtful: "How are you feeling about that?",
-        supportive: "You're doing great! 🌟",
-        activity: "Want to hang out later? 😄",
-        deeper: "What's been the highlight of your day?"
-      },
-      playful: {
-        casual: "Haha that's hilarious! 😂",
-        thoughtful: "Ooh tell me more! 🤪",
-        supportive: "You're so funny! 🎉",
-        activity: "Let's do something fun! 😜",
-        deeper: "What's the craziest thing that happened today?"
-      },
-      chill: {
-        casual: "Cool cool 😎",
-        thoughtful: "Sounds interesting",
-        supportive: "You got this ✌️",
-        activity: "Maybe we should chill later 👌",
-        deeper: "What's your vibe lately?"
-      },
-      stressed: {
-        casual: "Ugh I feel you 😤",
-        thoughtful: "That sounds overwhelming 😩",
-        supportive: "Take a deep breath, you got this 💪",
-        activity: "Need a study break? 🤯",
-        deeper: "How are you handling all this stress?"
-      },
-      flirty: {
-        casual: "Hey gorgeous 😏",
-        thoughtful: "You're on my mind ❤️",
-        supportive: "You're amazing 💕",
-        activity: "Date night? 😘",
-        deeper: "What makes you smile the most?"
-      },
-      sarcastic: {
-        casual: "Oh really? 🙄",
-        thoughtful: "How surprising... 😒",
-        supportive: "You're handling that well 🤷‍♀️",
-        activity: "Sure, let's do that 🙄",
-        deeper: "What's your take on all this chaos?"
-      },
-      supportive: {
-        casual: "I'm here for you! 🤗",
-        thoughtful: "How can I help?",
-        supportive: "You're stronger than you know! 💪",
-        activity: "Let's do something relaxing ❤️",
-        deeper: "What would make you feel better right now?"
-      },
-      excited: {
-        casual: "OMG YES! 🤩",
-        thoughtful: "This is SO cool! ✨",
-        supportive: "You're incredible! 🔥",
-        activity: "Let's celebrate! 🎉",
-        deeper: "What's got you most excited lately?"
-      }
-    };
-    
-    return fallbacks[mood]?.[type] || fallbacks.friendly[type] || "That's interesting!";
-  }
-
-  // 14. Smart Caption Enhancement for Messages
-  async enhanceMessageWithContext(message, conversationContext = {}) {
-    try {
-      const prompt = `
-You are an AI assistant helping enhance messages with smart context.
-
-Original Message: "${message}"
-Conversation Context: ${conversationContext.topic || 'general chat'}
-Relationship: ${conversationContext.relationship || 'friend'}
-Current Mood: ${conversationContext.mood || 'neutral'}
-
-Enhance this message to be more engaging while keeping the original meaning:
-- Add appropriate emojis
-- Make it more conversational
-- Keep it authentic to college students
-- Don't change the core message
-- Keep it under 200 characters
-
-Return just the enhanced message, no JSON.`;
-
-      const response = await this.callOpenAI(prompt);
-      return response.trim();
-    } catch (error) {
-      console.error('Error enhancing message:', error);
-      return message; // Return original if enhancement fails
-    }
-  }
-
-  // 15. Conversation Analysis and Mood Detection
-  async analyzeConversation(messages = [], userProfile = {}) {
-    try {
-      const recentMessages = messages.slice(-10).map(m => 
-        `${m.sender_name || 'User'}: ${m.content}`
-      ).join('\n');
-
-      const prompt = `
-Analyze this college student conversation for mood, topics, and suggestions.
-
-Recent Messages:
-${recentMessages}
-
-Student Profile: ${JSON.stringify(userProfile)}
-
-Analyze and return insights as JSON:
-{
-  "mood": "happy/excited/stressed/worried/neutral/etc",
-  "topics": ["topic1", "topic2"],
-  "energy": "high/medium/low",
-  "suggestions": {
-    "conversation": ["suggestion1", "suggestion2"],
-    "activities": ["activity1", "activity2"],
-    "support": "any support needed"
-  },
-  "insights": "brief insight about the conversation"
-}`;
-
-      const response = await this.callOpenAI(prompt);
-      const result = this.parseJSONResponse(response);
-      
-      return {
-        analysis: result,
-        timestamp: Date.now(),
-        messageCount: messages.length
-      };
-    } catch (error) {
-      console.error('Error analyzing conversation:', error);
-      return {
-        analysis: {
-          mood: 'neutral',
-          topics: ['general'],
-          energy: 'medium',
-          suggestions: {
-            conversation: ['Keep the conversation going!'],
-            activities: ['Maybe plan something fun together'],
-            support: 'Looking good!'
-          },
-          insights: 'Having a great conversation!'
-        }
       };
     }
   }
@@ -1367,6 +1190,204 @@ Provide a detailed, helpful response that goes beyond basic advice:`;
       "Make today count! ⭐",
       "Stay positive! 😊"
     ];
+  }
+
+  // Helper functions for conversation analysis
+  analyzeConversationContext(messages) {
+    if (!messages || messages.length === 0) {
+      return {
+        topics: ['general conversation'],
+        energy: 'neutral',
+        lastTone: 'friendly',
+        responseType: 'casual_response',
+        keyPoints: ['starting conversation'],
+        mainFocus: 'getting to know each other'
+      };
+    }
+
+    const recentMessages = messages.slice(-5);
+    const lastMessage = messages[messages.length - 1] || '';
+    
+    // Analyze topics and themes
+    const topics = this.extractTopics(recentMessages);
+    const energy = this.analyzeEnergy(recentMessages);
+    const lastTone = this.analyzeTone(lastMessage);
+    const responseType = this.determineResponseType(lastMessage);
+    const keyPoints = this.extractKeyPoints(recentMessages);
+    
+    return {
+      topics,
+      energy,
+      lastTone,
+      responseType,
+      keyPoints,
+      mainFocus: topics[0] || 'general conversation',
+      lastMessage: lastMessage.substring(0, 100) // First 100 chars for context
+    };
+  }
+
+  extractTopics(messages) {
+    const topicKeywords = {
+      'classes': ['class', 'course', 'professor', 'homework', 'assignment', 'exam', 'test', 'study', 'lecture'],
+      'social': ['party', 'hang out', 'friends', 'fun', 'weekend', 'plans', 'meet up', 'together'],
+      'feelings': ['feel', 'sad', 'happy', 'excited', 'stressed', 'worried', 'love', 'hate', 'awesome'],
+      'food': ['eat', 'food', 'hungry', 'dinner', 'lunch', 'restaurant', 'cooking', 'meal'],
+      'work': ['work', 'job', 'busy', 'tired', 'project', 'deadline', 'meeting', 'boss'],
+      'relationships': ['dating', 'crush', 'boyfriend', 'girlfriend', 'like', 'love', 'relationship'],
+      'events': ['event', 'concert', 'movie', 'show', 'game', 'sport', 'match', 'competition'],
+      'campus': ['campus', 'dorm', 'college', 'university', 'student', 'library', 'cafeteria']
+    };
+
+    const messageText = messages.join(' ').toLowerCase();
+    const foundTopics = [];
+
+    for (const [topic, keywords] of Object.entries(topicKeywords)) {
+      const matches = keywords.filter(keyword => messageText.includes(keyword));
+      if (matches.length > 0) {
+        foundTopics.push(topic);
+      }
+    }
+
+    return foundTopics.length > 0 ? foundTopics : ['general conversation'];
+  }
+
+  analyzeEnergy(messages) {
+    const messageText = messages.join(' ').toLowerCase();
+    
+    const highEnergyWords = ['excited', 'awesome', 'amazing', 'love', 'party', 'fun', '!', 'haha', 'lol'];
+    const lowEnergyWords = ['tired', 'stressed', 'sad', 'boring', 'meh', 'whatever', 'ok', 'fine'];
+    
+    const highEnergyCount = highEnergyWords.filter(word => messageText.includes(word)).length;
+    const lowEnergyCount = lowEnergyWords.filter(word => messageText.includes(word)).length;
+    
+    if (highEnergyCount > lowEnergyCount && highEnergyCount > 0) return 'high';
+    if (lowEnergyCount > highEnergyCount && lowEnergyCount > 0) return 'low';
+    return 'medium';
+  }
+
+  analyzeTone(message) {
+    if (!message) return 'neutral';
+    
+    const msg = message.toLowerCase();
+    
+    if (msg.includes('?')) return 'questioning';
+    if (msg.includes('!') || msg.includes('haha') || msg.includes('lol')) return 'excited';
+    if (msg.includes('sad') || msg.includes('tired') || msg.includes('stressed')) return 'concerned';
+    if (msg.includes('love') || msg.includes('awesome') || msg.includes('great')) return 'positive';
+    if (msg.includes('ok') || msg.includes('sure') || msg.includes('whatever')) return 'casual';
+    
+    return 'friendly';
+  }
+
+  determineResponseType(message) {
+    if (!message) return 'conversation_starter';
+    
+    const msg = message.toLowerCase();
+    
+    if (msg.includes('?')) return 'answer_question';
+    if (msg.includes('what do you think') || msg.includes('opinion')) return 'give_opinion';
+    if (msg.includes('plan') || msg.includes('want to') || msg.includes('should we')) return 'make_plans';
+    if (msg.includes('sad') || msg.includes('stressed') || msg.includes('worried')) return 'show_support';
+    if (msg.includes('excited') || msg.includes('awesome') || msg.includes('great news')) return 'show_enthusiasm';
+    
+    return 'continue_conversation';
+  }
+
+  extractKeyPoints(messages) {
+    const points = [];
+    messages.forEach(msg => {
+      if (msg.includes('going to') || msg.includes('planning')) points.push('future plans');
+      if (msg.includes('happened') || msg.includes('today') || msg.includes('yesterday')) points.push('recent events');
+      if (msg.includes('feeling') || msg.includes('think')) points.push('personal thoughts');
+      if (msg.includes('we should') || msg.includes('want to')) points.push('suggestions');
+    });
+    
+    return points.length > 0 ? [...new Set(points)] : ['general chat'];
+  }
+
+  getContextualFallback(conversationAnalysis, mood, type) {
+    const topic = conversationAnalysis.topics[0] || 'general';
+    const energy = conversationAnalysis.energy;
+    
+    const contextualResponses = {
+      classes: {
+        direct: energy === 'low' ? "Ugh that sounds rough 😤" : "Oh nice! How's that going? 😊",
+        followup: "What's your favorite class this semester?",
+        share: "I'm dealing with similar stuff in my classes too!",
+        deeper: "How are you feeling about your workload overall?",
+        transition: "Speaking of classes, did you see what happened in..."
+      },
+      social: {
+        direct: energy === 'high' ? "That sounds awesome! 🎉" : "Yeah, good to hang out 😊",
+        followup: "Who else is going?",
+        share: "I love doing stuff like that too!",
+        deeper: "What's your ideal way to spend a weekend?",
+        transition: "That reminds me, have you heard about..."
+      },
+      feelings: {
+        direct: conversationAnalysis.lastTone === 'concerned' ? "I'm here for you 🤗" : "That's great to hear! 😊",
+        followup: "How long have you been feeling this way?",
+        share: "I totally get that feeling",
+        deeper: "What's been helping you through this?",
+        transition: "Speaking of feelings, how have you been lately overall?"
+      },
+      general: {
+        direct: this.getMoodFallback(mood, 'casual'),
+        followup: "Tell me more about that!",
+        share: "I can relate to that",
+        deeper: "How do you feel about all this?",
+        transition: "That's interesting, it makes me think of..."
+      }
+    };
+    
+    return contextualResponses[topic]?.[type] || contextualResponses.general[type];
+  }
+
+  generateContextualFallbacks(conversationAnalysis, mood) {
+    const suggestions = [
+      this.getContextualFallback(conversationAnalysis, mood, 'direct'),
+      this.getContextualFallback(conversationAnalysis, mood, 'followup'),
+      this.getContextualFallback(conversationAnalysis, mood, 'share'),
+      this.getContextualFallback(conversationAnalysis, mood, 'deeper'),
+      this.getContextualFallback(conversationAnalysis, mood, 'transition')
+    ];
+    
+    return suggestions;
+  }
+
+  getMoodFallback(mood, type) {
+    const fallbacks = {
+      friendly: {
+        casual: "That's awesome! 😊",
+        thoughtful: "How are you feeling about that?",
+        supportive: "You're doing great! 🌟",
+        activity: "Want to hang out later? 😄",
+        deeper: "What's been the highlight of your day?"
+      },
+      playful: {
+        casual: "Haha that's hilarious! 😂",
+        thoughtful: "Ooh tell me more! 🤪",
+        supportive: "You're so funny! 🎉",
+        activity: "Let's do something fun! 😜",
+        deeper: "What's the craziest thing that happened today?"
+      },
+      chill: {
+        casual: "Cool cool 😎",
+        thoughtful: "Sounds interesting",
+        supportive: "You got this ✌️",
+        activity: "Maybe we should chill later 👌",
+        deeper: "What's your vibe lately?"
+      },
+      stressed: {
+        casual: "Ugh I feel you 😤",
+        thoughtful: "That sounds overwhelming 😩",
+        supportive: "Take a deep breath, you got this 💪",
+        activity: "Need a study break? 🤯",
+        deeper: "How are you handling all this stress?"
+      }
+    };
+    
+    return fallbacks[mood]?.[type] || fallbacks.friendly[type] || "That's interesting!";
   }
 }
 
