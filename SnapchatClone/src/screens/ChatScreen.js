@@ -22,6 +22,7 @@ import AIAssistant from '../components/AIAssistant';
 import FloatingAIButton from '../components/FloatingAIButton';
 import ragService from '../services/ragService';
 import userProfileService from '../services/userProfileService';
+import contentModerationService from '../services/contentModerationService';
 
 const { width: screenWidth } = Dimensions.get('window');
 
@@ -42,6 +43,10 @@ export default function ChatScreen({ navigation, route }) {
   // Mood selection state
   const [showMoodSelector, setShowMoodSelector] = useState(false);
   const [selectedMood, setSelectedMood] = useState('friendly');
+  
+  // Group chat management state
+  const [showGroupSummary, setShowGroupSummary] = useState(false);
+  const [groupSummary, setGroupSummary] = useState('');
   
   const { currentUser, supabase } = useAuth();
   const { currentTheme } = useTheme();
@@ -441,8 +446,56 @@ export default function ChatScreen({ navigation, route }) {
     if (!isGroup && !otherUser?.id) return;
 
     const messageContent = newMessage.trim();
-    setNewMessage('');
     setSending(true);
+
+    try {
+      // Content moderation check
+      const moderationResult = await contentModerationService.moderateMessage(messageContent, currentUser.id);
+      
+      if (!moderationResult.safe && moderationResult.recommendation === 'block') {
+        Alert.alert(
+          'Message Not Sent',
+          moderationResult.reason || 'This message may contain inappropriate content.',
+          [{ text: 'OK', style: 'default' }]
+        );
+        setSending(false);
+        return;
+      }
+
+      if (moderationResult.flagged && moderationResult.severity === 'high') {
+        Alert.alert(
+          'Content Advisory',
+          `${moderationResult.reason}\n\n${moderationResult.suggestion || 'Please consider revising your message.'}`,
+          [
+            { text: 'Cancel', style: 'cancel', onPress: () => setSending(false) },
+            { text: 'Send Anyway', style: 'destructive', onPress: () => proceedWithSending(messageContent) }
+          ]
+        );
+        return;
+      }
+
+      // If content detected distress signals, offer support
+      if (moderationResult.suggestion && moderationResult.concerns?.includes('distress')) {
+        Alert.alert(
+          'We Care About You',
+          moderationResult.suggestion,
+          [
+            { text: 'Thanks', style: 'default' },
+            { text: 'Get Help', style: 'default', onPress: () => showSupportResources() }
+          ]
+        );
+      }
+
+      await proceedWithSending(messageContent);
+    } catch (error) {
+      console.error('Error in sendMessage:', error);
+      Alert.alert('Error', 'Failed to send message. Please try again.');
+      setSending(false);
+    }
+  };
+
+  const proceedWithSending = async (messageContent) => {
+    setNewMessage('');
     Keyboard.dismiss();
 
     // Create optimistic message to show immediately

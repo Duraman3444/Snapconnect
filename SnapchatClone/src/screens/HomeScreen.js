@@ -6,6 +6,7 @@ import AIAssistant from '../components/AIAssistant';
 import FloatingAIButton from '../components/FloatingAIButton';
 import ragService from '../services/ragService';
 import userProfileService from '../services/userProfileService';
+import smartNotificationService from '../services/smartNotificationService';
 
 export default function HomeScreen({ navigation }) {
   const [snaps, setSnaps] = useState([]);
@@ -23,6 +24,9 @@ export default function HomeScreen({ navigation }) {
     loadSnaps();
     loadUserProfile();
     generateDailyRecommendations();
+    
+    // Track user activity for smart notifications
+    smartNotificationService.trackUserActivity(currentUser.id);
     
     // Set up real-time subscription for new snaps
     const subscription = supabase
